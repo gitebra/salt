@@ -238,23 +238,20 @@ A more complex ``recurse`` example:
 from __future__ import absolute_import
 import difflib
 import itertools
-import json
 import logging
 import os
-import pprint
 import shutil
 import traceback
-import yaml
 from collections import Iterable, Mapping
 
 # Import salt libs
+import salt.loader
 import salt.payload
 import salt.utils
 import salt.utils.templates
 import salt.utils.url
+from salt.utils.locales import sdecode
 from salt.exceptions import CommandExecutionError
-from salt.serializers import yaml as yaml_serializer
-from salt.serializers import json as json_serializer
 
 # Import 3rd-party libs
 import salt.ext.six as six
@@ -433,7 +430,7 @@ def _clean_dir(root, keep, exclude_pat):
                 try:
                     os.remove(nfn)
                 except OSError:
-                    shutil.rmtree(nfn)
+                    __salt__['file.remove'](nfn)
 
     for roots, dirs, files in os.walk(root):
         for name in itertools.chain(dirs, files):
@@ -483,9 +480,13 @@ def _check_directory(name,
                 stats = __salt__['file.stats'](
                     path, None, follow_symlinks=False
                 )
-                if user is not None and user != stats.get('user'):
+                if (user is not None
+                        and user != stats.get('user')
+                        and user != stats.get('uid')):
                     fchange['user'] = user
-                if group is not None and group != stats.get('group'):
+                if (group is not None
+                        and group != stats.get('group')
+                        and group != stats.get('gid')):
                     fchange['group'] = group
                 if fchange:
                     changes[path] = fchange
@@ -541,9 +542,13 @@ def _check_dir_meta(name,
     if not stats:
         changes['directory'] = 'new'
         return changes
-    if user is not None and user != stats['user']:
+    if (user is not None
+            and user != stats['user']
+            and user != stats.get('uid')):
         changes['user'] = user
-    if group is not None and group != stats['group']:
+    if (group is not None
+            and group != stats['group']
+            and group != stats.get('gid')):
         changes['group'] = group
     # Normalize the dir mode
     smode = __salt__['config.manage_mode'](stats['mode'])
@@ -917,23 +922,16 @@ def symlink(
                     return _error(ret, ((
                                             'File exists where the backup target {0} should go'
                                         ).format(backupname)))
-                elif os.path.isfile(backupname):
-                    os.remove(backupname)
-                elif os.path.isdir(backupname):
-                    shutil.rmtree(backupname)
                 else:
-                    return _error(ret, ((
-                                            'Something exists where the backup target {0}'
-                                            'should go'
-                                        ).format(backupname)))
+                    __salt__['file.remove'](backupname)
             os.rename(name, backupname)
         elif force:
             # Remove whatever is in the way
-            if os.path.isfile(name):
-                os.remove(name)
+            if __salt__['file.is_link'](name):
+                __salt__['file.remove'](name)
                 ret['changes']['forced'] = 'Symlink was forcibly replaced'
             else:
-                shutil.rmtree(name)
+                __salt__['file.remove'](name)
         else:
             # Otherwise throw an error
             if os.path.isfile(name):
@@ -1012,7 +1010,7 @@ def absent(name):
             ret['comment'] = 'Directory {0} is set for removal'.format(name)
             return ret
         try:
-            shutil.rmtree(name)
+            __salt__['file.remove'](name)
             ret['comment'] = 'Removed directory {0}'.format(name)
             ret['changes']['removed'] = name
             return ret
@@ -1122,7 +1120,9 @@ def managed(name,
 
         A list of sources can also be passed in to provide a default source and
         a set of fallbacks. The first source in the list that is found to exist
-        will be used and subsequent entries in the list will be ignored.
+        will be used and subsequent entries in the list will be ignored. Source
+        list functionality only supports local files and remote files hosted on
+        the salt master server or retrievable via HTTP, HTTPS, or FTP.
 
         .. code-block:: yaml
 
@@ -1782,28 +1782,19 @@ def directory(name,
                     return _error(ret, ((
                                             'File exists where the backup target {0} should go'
                                         ).format(backupname)))
-                elif os.path.isfile(backupname):
-                    os.remove(backupname)
-                elif os.path.islink(backupname):
-                    os.remove(backupname)
-                elif os.path.isdir(backupname):
-                    shutil.rmtree(backupname)
                 else:
-                    return _error(ret, ((
-                                            'Something exists where the backup target {0}'
-                                            'should go'
-                                        ).format(backupname)))
+                    __salt__['file.remove'](backupname)
             os.rename(name, backupname)
         elif force:
             # Remove whatever is in the way
             if os.path.isfile(name):
                 os.remove(name)
                 ret['changes']['forced'] = 'File was forcibly replaced'
-            elif os.path.islink(name):
-                os.remove(name)
+            elif __salt__['file.is_link'](name):
+                __salt__['file.remove'](name)
                 ret['changes']['forced'] = 'Symlink was forcibly replaced'
             else:
-                shutil.rmtree(name)
+                __salt__['file.remove'](name)
         else:
             if os.path.isfile(name):
                 return _error(
@@ -2109,7 +2100,7 @@ def recurse(name,
         recursively removed so that symlink creation can proceed. This
         option is usually not needed except in special circumstances.
     '''
-    name = os.path.expanduser(name)
+    name = os.path.expanduser(sdecode(name))
 
     user = _test_owner(kwargs, user=user)
     if salt.utils.is_windows():
@@ -2231,7 +2222,7 @@ def recurse(name,
                 merge_ret(path, _ret)
                 return
             else:
-                shutil.rmtree(path)
+                __salt__['file.remove'](path)
                 _ret['changes'] = {'diff': 'Replaced directory with a '
                                            'new file'}
                 merge_ret(path, _ret)
@@ -2347,7 +2338,7 @@ def recurse(name,
         # the file to copy from; it is either a normal file or an
         # empty dir(if include_empty==true).
 
-        relname = os.path.relpath(fn_, srcpath)
+        relname = sdecode(os.path.relpath(fn_, srcpath))
         if relname.startswith('..'):
             continue
 
@@ -3565,7 +3556,7 @@ def patch(name,
         using this state function.
 
     name
-        The file to with the patch will be applied.
+        The file to which the patch will be applied.
 
     source
         The source patch to download to the minion, this source file must be
@@ -3866,12 +3857,7 @@ def copy(
         elif not __opts__['test'] and changed:
             # Remove the destination to prevent problems later
             try:
-                if os.path.islink(name):
-                    os.unlink(name)
-                elif os.path.isfile(name):
-                    os.remove(name)
-                else:
-                    shutil.rmtree(name)
+                __salt__['file.remove'](name)
             except (IOError, OSError):
                 return _error(
                     ret,
@@ -3971,12 +3957,7 @@ def rename(name, source, force=False, makedirs=False):
         elif not __opts__['test']:
             # Remove the destination to prevent problems later
             try:
-                if os.path.islink(name):
-                    os.unlink(name)
-                elif os.path.isfile(name):
-                    os.remove(name)
-                else:
-                    shutil.rmtree(name)
+                __salt__['file.remove'](name)
             except (IOError, OSError):
                 return _error(
                     ret,
@@ -4143,7 +4124,7 @@ def _merge_dict(obj, k, v):
                         for x, y in six.iteritems(updates):
                             changes[k + "." + x] = y
                     else:
-                        if obj[k][a] != b:
+                        if a not in obj[k] or obj[k][a] != b:
                             changes[k + "." + a] = b
                             obj[k][a] = b
             else:
@@ -4304,49 +4285,31 @@ def serialize(name,
         return _error(
             ret, 'Neither \'dataset\' nor \'dataset_pillar\' was defined')
 
-    if merge_if_exists:
-        if os.path.isfile(name):
-            if formatter == 'yaml':
-                with salt.utils.fopen(name, 'r') as fhr:
-                    existing_data = yaml.safe_load(fhr)
-            elif formatter == 'json':
-                with salt.utils.fopen(name, 'r') as fhr:
-                    existing_data = json.load(fhr)
-            else:
-                return {'changes': {},
-                        'comment': ('{0} format is not supported for merging'
-                                    .format(formatter.capitalize())),
-                        'name': name,
-                        'result': False}
+    serializer_name = '{0}.serialize'.format(formatter)
+    if serializer_name in __serializers__:
+        serializer = __serializers__[serializer_name]
+        if merge_if_exists:
+            if os.path.isfile(name):
+                if '{0}.deserialize'.format(formatter) in __serializers__:
+                    with salt.utils.fopen(name, 'r') as fhr:
+                        existing_data = serializer.deserialize(fhr)
+                else:
+                    return {'changes': {},
+                            'comment': ('{0} format is not supported for merging'
+                                        .format(formatter.capitalize())),
+                            'name': name,
+                            'result': False}
 
-            if existing_data is not None:
-                for k, v in six.iteritems(dataset):
-                    if k in existing_data:
-                        ret['changes'].update(_merge_dict(existing_data, k, v))
-                    else:
-                        ret['changes'][k] = v
-                        existing_data[k] = v
-                dataset = existing_data
+                if existing_data is not None:
+                    for k, v in six.iteritems(dataset):
+                        if k in existing_data:
+                            ret['changes'].update(_merge_dict(existing_data, k, v))
+                        else:
+                            ret['changes'][k] = v
+                            existing_data[k] = v
+                    dataset = existing_data
 
-    if formatter == 'yaml':
-        contents = yaml_serializer.serialize(dataset,
-                                             default_flow_style=False)
-    elif formatter == 'json':
-        contents = json_serializer.serialize(dataset,
-                                             indent=2,
-                                             separators=(',', ': '),
-                                             sort_keys=True)
-    elif formatter == 'python':
-        # round-trip this through JSON to avoid OrderedDict types
-        # there's probably a more performant way to do this...
-        # TODO remove json round-trip when all dataset will use
-        # serializers
-        contents = pprint.pformat(
-            json.loads(
-                json.dumps(dataset),
-                object_hook=salt.utils.decode_dict
-            )
-        )
+        contents = __serializers__[serializer_name](dataset)
     else:
         return {'changes': {},
                 'comment': '{0} format is not supported'.format(

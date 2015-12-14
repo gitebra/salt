@@ -36,6 +36,9 @@ import salt.utils.locales
 # Import 3rd-party libs
 import salt.ext.six as six
 
+# Import 3rd-party libs
+import salt.ext.six as six
+
 log = logging.getLogger(__name__)
 
 
@@ -115,7 +118,7 @@ def _changes(name,
         wanted_groups.remove(default_grp)
     if _group_changes(lusr['groups'], wanted_groups, remove_groups):
         change['groups'] = wanted_groups
-    if home and lusr['home'] != home:
+    if home and lusr['home'] != home and createhome:
         change['home'] = home
     if createhome:
         newhome = home if home else lusr['home']
@@ -244,7 +247,7 @@ def present(name,
 
     home
         The custom login directory of user. Uses default value of underlying
-        system if not set. Notice that this directory does not have to exists.
+        system if not set. Notice that this directory does not have to exist.
         This also the location of the home directory to create if createhome is
         set to True.
 
@@ -258,6 +261,7 @@ def present(name,
         Linux, FreeBSD, NetBSD, OpenBSD, and Solaris. If the ``empty_password``
         argument is set to ``True`` then ``password`` is ignored.
         For Windows this is the plain text password.
+        For Linux, the hash can be generated with ``openssl passwd -1``.
 
     .. versionchanged:: 0.16.0
        BSD support added.
@@ -340,20 +344,24 @@ def present(name,
         mapped to the specified drive. Must be a letter followed by a colon.
         Because of the colon, the value must be surrounded by single quotes. ie:
         - win_homedrive: 'U:
-    .. versionchanged:: 2015.8.0
+
+        .. versionchanged:: 2015.8.0
 
     win_profile (Windows Only)
         The custom profile directory of the user. Uses default value of
         underlying system if not set.
-    .. versionchanged:: 2015.8.0
+
+        .. versionchanged:: 2015.8.0
 
     win_logonscript (Windows Only)
         The full path to the logon script to run when the user logs in.
-    .. versionchanged:: 2015.8.0
+
+        .. versionchanged:: 2015.8.0
 
     win_description (Windows Only)
         A brief description of the purpose of the users account.
-    .. versionchanged:: 2015.8.0
+
+        .. versionchanged:: 2015.8.0
     '''
     if fullname is not None:
         fullname = salt.utils.locales.sdecode(fullname)
@@ -368,6 +376,14 @@ def present(name,
            'changes': {},
            'result': True,
            'comment': 'User {0} is present and up to date'.format(name)}
+
+    # the comma is used to separate field in GECOS, thus resulting into
+    # salt adding the end of fullname each time this function is called
+    for gecos_field in ['fullname', 'roomnumber', 'workphone', 'homephone']:
+        if isinstance(gecos_field, six.string_types) and ',' in gecos_field:
+            ret['comment'] = "Unsupported char ',' in {0}".format(gecos_field)
+            ret['result'] = False
+            return ret
 
     if groups:
         missing_groups = [x for x in groups if not __salt__['group.info'](x)]
@@ -589,6 +605,9 @@ def present(name,
         if __salt__['user.add'](**params):
             ret['comment'] = 'New user {0} created'.format(name)
             ret['changes'] = __salt__['user.info'](name)
+            if not createhome:
+                # pwd incorrectly reports presence of home
+                ret['changes']['home'] = ''
             if 'shadow.info' in __salt__ and not salt.utils.is_windows():
                 if password and not empty_password:
                     __salt__['shadow.set_password'](name, password)

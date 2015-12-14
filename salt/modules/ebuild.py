@@ -48,7 +48,7 @@ def __virtual__():
     '''
     if HAS_PORTAGE and __grains__['os'] == 'Gentoo':
         return __virtualname__
-    return False
+    return (False, 'The ebuild execution module cannot be loaded: either the system is not Gentoo or the portage python library is not available.')
 
 
 def _vartree():
@@ -581,7 +581,7 @@ def install(name=None,
             if fromrepo is not None:
                 version_num += '::{0}'.format(fromrepo)
             if uses is not None:
-                version_num += '["{0}"]'.format('","'.join(uses))
+                version_num += '[{0}]'.format(','.join(uses))
             pkg_params = {name: version_num}
 
     if pkg_params is None or len(pkg_params) == 0:
@@ -618,35 +618,35 @@ def install(name=None,
                     keyword, gt_lt, eq, verstr = match.groups()
                     prefix = gt_lt or ''
                     prefix += eq or ''
-                    # We need to delete quotes around use flag list elements
-                    verstr = verstr.replace("'", "")
                     # If no prefix characters were supplied and verstr contains a version, use '='
                     if len(verstr) > 0 and verstr[0] != ':' and verstr[0] != '[':
                         prefix = prefix or '='
-                        target = '"{0}{1}-{2}"'.format(prefix, param, verstr)
+                        target = '{0}{1}-{2}'.format(prefix, param, verstr)
                     else:
-                        target = '"{0}{1}"'.format(param, verstr)
+                        target = '{0}{1}'.format(param, verstr)
                 else:
-                    target = '"{0}"'.format(param)
+                    target = '{0}'.format(param)
 
                 if '[' in target:
-                    old = __salt__['portage_config.get_flags_from_package_conf']('use', target[1:-1])
-                    __salt__['portage_config.append_use_flags'](target[1:-1])
-                    new = __salt__['portage_config.get_flags_from_package_conf']('use', target[1:-1])
+                    old = __salt__['portage_config.get_flags_from_package_conf']('use', target)
+                    __salt__['portage_config.append_use_flags'](target)
+                    new = __salt__['portage_config.get_flags_from_package_conf']('use', target)
                     if old != new:
                         changes[param + '-USE'] = {'old': old, 'new': new}
-                    target = target[:target.rfind('[')] + '"'
+                    target = target[:target.rfind('[')]
 
                 if keyword is not None:
                     __salt__['portage_config.append_to_package_conf']('accept_keywords',
-                                                                        target[1:-1],
+                                                                        target,
                                                                         ['~ARCH'])
                     changes[param + '-ACCEPT_KEYWORD'] = {'old': '', 'new': '~ARCH'}
 
                 if not changes:
                     inst_v = version(param)
 
-                    if latest_version(param) == inst_v:
+                    # Prevent latest_version from calling refresh_db. Either we
+                    # just called it or we were asked not to.
+                    if latest_version(param, refresh=False) == inst_v:
                         all_uses = __salt__['portage_config.get_cleared_flags'](param)
                         if _flags_changed(*all_uses):
                             changes[param] = {'version': inst_v,

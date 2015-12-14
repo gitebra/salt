@@ -15,6 +15,7 @@
 from __future__ import absolute_import, print_function
 import os
 import sys
+import types
 import signal
 import getpass
 import logging
@@ -932,10 +933,11 @@ class DaemonMixIn(six.with_metaclass(MixInMeta, object)):
         self._install_signal_handlers()
 
     def _handle_signals(self, signum, sigframe):  # pylint: disable=unused-argument
+        msg = self.__class__.__name__
         if signum == signal.SIGINT:
-            msg = 'Received a SIGINT.'
+            msg += ' received a SIGINT.'
         elif signum == signal.SIGTERM:
-            msg = 'Received a SIGTERM.'
+            msg += ' received a SIGTERM.'
         logging.getLogger(__name__).warning('{0} Exiting.'.format(msg))
         self.shutdown(exitmsg='{0} Exited.'.format(msg))
 
@@ -953,31 +955,46 @@ class PidfileMixin(six.with_metaclass(MixInMeta, object)):
             'DaemonMixIn which contains the same behavior. PidfileMixin '
             'will be supported until Salt {version}.'
         )
-        self.add_option(
-            '--pid-file', dest='pidfile',
-            default=os.path.join(
-                syspaths.PIDFILE_DIR, '{0}.pid'.format(self.get_prog_name())
-            ),
-            help=('Specify the location of the pidfile. Default: %default')
-        )
+        try:
+            self.add_option(
+                '--pid-file', dest='pidfile',
+                default=os.path.join(
+                    syspaths.PIDFILE_DIR, '{0}.pid'.format(self.get_prog_name())
+                ),
+                help=('Specify the location of the pidfile. Default: %default')
+            )
 
-    def set_pidfile(self):
-        from salt.utils.process import set_pidfile
-        set_pidfile(self.config['pidfile'], self.config['user'])
+            # Since there was no colision with DaemonMixin, let's add the
+            # pidfile mixin methods. This is used using types.MethodType
+            # because if we had defined these at the class level, they would
+            # have overridden the exact same methods from the DaemonMixin.
 
-    def check_pidfile(self):
-        '''
-        Report whether a pidfile exists
-        '''
-        from salt.utils.process import check_pidfile
-        return check_pidfile(self.config['pidfile'])
+            def set_pidfile(self):
+                from salt.utils.process import set_pidfile
+                set_pidfile(self.config['pidfile'], self.config['user'])
 
-    def get_pidfile(self):
-        '''
-        Return a pid contained in a pidfile
-        '''
-        from salt.utils.process import get_pidfile
-        return get_pidfile(self.config['pidfile'])
+            self.set_pidfile = types.MethodType(set_pidfile, self)
+
+            def check_pidfile(self):
+                '''
+                Report whether a pidfile exists
+                '''
+                from salt.utils.process import check_pidfile
+                return check_pidfile(self.config['pidfile'])
+
+            self.check_pidfile = types.MethodType(check_pidfile, self)
+
+            def get_pidfile(self):
+                '''
+                Return a pid contained in a pidfile
+                '''
+                from salt.utils.process import get_pidfile
+                return get_pidfile(self.config['pidfile'])
+
+            self.get_pidfile = types.MethodType(get_pidfile, self)
+        except optparse.OptionConflictError:
+            # The option was already added by the DaemonMixin
+            pass
 
 
 class TargetOptionsMixIn(six.with_metaclass(MixInMeta, object)):
@@ -1342,7 +1359,7 @@ class ExecutionOptionsMixIn(six.with_metaclass(MixInMeta, object)):
             '-m', '--map',
             default=None,
             help='Specify a cloud map file to use for deployment. This option '
-                 'may be used alone, or in conjunction with -Q, -F, -S or -d.'
+                 'may be used alone, or in conjunction with -Q, -F, -S or -d. '
                  'The map can also be filtered by a list of VM names.'
         )
         group.add_option(
@@ -1812,6 +1829,14 @@ class SaltCMDOptionParser(six.with_metaclass(OptionParserMeta,
             help=('Execute the salt job in batch mode, pass either the number '
                   'of minions to batch at a time, or the percentage of '
                   'minions to have running')
+        )
+        self.add_option(
+            '--batch-wait',
+            default=0,
+            dest='batch_wait',
+            type=float,
+            help=('Wait the specified time in seconds after each job is done '
+                  'before freeing the slot in the batch for the next one')
         )
         self.add_option(
             '-a', '--auth', '--eauth', '--external-auth',
@@ -2918,6 +2943,12 @@ class SPMParser(six.with_metaclass(OptionParserMeta,
             action='store_true',
             help='Default yes in answer to all confirmation questions.'
         )
+        self.add_option(
+            '-v', '--verbose',
+            default=False,
+            action='store_true',
+            help='Display more detailed information.'
+        )
 
     def _mixin_after_parsed(self):
         # spm needs arguments
@@ -2928,3 +2959,21 @@ class SPMParser(six.with_metaclass(OptionParserMeta,
 
     def setup_config(self):
         return salt.config.spm_config(self.get_config_file_path())
+
+
+class SaltAPIParser(six.with_metaclass(OptionParserMeta,
+                                       OptionParser,
+                                       ConfigDirMixIn,
+                                       LogLevelMixIn,
+                                       DaemonMixIn,
+                                       MergeConfigMixIn)):
+    '''
+    The Salt API cli parser object used to fire up the salt api system.
+    '''
+    # ConfigDirMixIn config filename attribute
+    _config_filename_ = 'master'
+    # LogLevelMixIn attributes
+    _default_logging_logfile_ = os.path.join(syspaths.LOGS_DIR, 'api')
+
+    def setup_config(self):
+        return salt.config.api_config(self.get_config_file_path())  # pylint: disable=no-member

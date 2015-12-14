@@ -110,7 +110,8 @@ def __virtual__():
             global GPG_1_3_1
             GPG_1_3_1 = True
         return __virtualname__
-    return False
+    return (False, 'The gpg execution module cannot be loaded; either the'
+       ' gnupg module is not installed or the gpg binary is not in the path.')
 
 
 def _create_gpg(user=None, gnupghome=None):
@@ -666,11 +667,6 @@ def import_key(user=None,
             raise SaltInvocationError('filename does not exist.')
 
     imported_data = gpg.import_keys(text)
-
-    # include another check for Salt unit tests
-    gnupg_version = distutils.version.LooseVersion(gnupg.__version__)
-    if gnupg_version >= '1.3.1':
-        GPG_1_3_1 = True
 
     if GPG_1_3_1:
         counts = imported_data.counts

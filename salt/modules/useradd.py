@@ -30,7 +30,7 @@ def __virtual__():
 
     if HAS_PWD and __grains__['kernel'] in ('Linux', 'OpenBSD', 'NetBSD'):
         return __virtualname__
-    return False
+    return (False, 'useradd execution module not loaded: either pwd python library not available or system not one of Linux, OpenBSD or NetBSD')
 
 
 def _get_gecos(name):
@@ -152,12 +152,11 @@ def add(name,
                 # /etc/usermgmt.conf not present: defaults will be used
                 pass
 
-    if salt.utils.is_true(createhome):
-        if createhome:
-            cmd.append('-m')
-        elif (__grains__['kernel'] != 'NetBSD'
-                and __grains__['kernel'] != 'OpenBSD'):
-            cmd.append('-M')
+    if createhome:
+        cmd.append('-m')
+    elif (__grains__['kernel'] != 'NetBSD'
+            and __grains__['kernel'] != 'OpenBSD'):
+        cmd.append('-M')
 
     if home is not None:
         cmd.extend(['-d', home])

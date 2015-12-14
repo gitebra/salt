@@ -35,7 +35,8 @@ def __virtual__():
     '''
     if __grains__['kernel'] == 'Linux' and salt.utils.systemd.booted(__context__):
         return __virtualname__
-    return False
+    return (False, 'The systemd execution module failed to load: '
+        "only available on Linux systems which have been booted with systemd.")
 
 
 def _canonical_unit_name(name):
@@ -73,8 +74,7 @@ def _get_all_units():
                       r')\s+loaded\s+(?P<active>[^\s]+)')
 
     out = __salt__['cmd.run_stdout'](
-        'systemctl --all --full --no-legend --no-pager list-units | col -b',
-        python_shell=True
+        'systemctl --all --full --no-legend --no-pager list-units'
     )
 
     ret = {}
@@ -96,8 +96,7 @@ def _get_all_unit_files():
                       r')\s+(?P<state>.+)$')
 
     out = __salt__['cmd.run_stdout'](
-        'systemctl --full --no-legend --no-pager list-unit-files | col -b',
-        python_shell=True
+        'systemctl --full --no-legend --no-pager list-unit-files'
     )
 
     ret = {}
@@ -111,8 +110,8 @@ def _get_all_unit_files():
 
 def _get_all_legacy_init_scripts():
     '''
-    Get all old-fashioned init-style scripts. State is always inactive, because systemd would already show them
-    otherwise.
+    Get all old-fashioned init-style scripts. State is always inactive, because
+    systemd would already show them otherwise.
     '''
     ret = {}
     if not os.path.isdir(LEGACY_INIT_SCRIPT_PATH):
@@ -127,12 +126,12 @@ def _get_all_legacy_init_scripts():
 
 def _untracked_custom_unit_found(name):
     '''
-    If the passed service name is not in the output from get_all(), but a unit
-    file exist in /etc/systemd/system, return True. Otherwise, return False.
+    If the passed service name is not available, but a unit file exist in
+    /etc/systemd/system, return True. Otherwise, return False.
     '''
     unit_path = os.path.join('/etc/systemd/system',
                              _canonical_unit_name(name))
-    return name not in get_all() and os.access(unit_path, os.R_OK)
+    return os.access(unit_path, os.R_OK) and not available(name)
 
 
 def _unit_file_changed(name):
@@ -349,17 +348,18 @@ def available(name):
 
         salt '*' service.available sshd
     '''
-    name = _canonical_template_unit_name(name)
-    if name.endswith('.service'):
-        name = name[:-8]  # len('.service') is 8
-    units = get_all()
-    if name in units:
+    name = _canonical_unit_name(name)
+    list_unit = 'systemctl --full --no-legend --no-pager list-units ' + name
+    matched_units = __salt__['cmd.run_stdout'](list_unit)
+    if len(matched_units) > 0:
         return True
-    elif '@' in name:
-        templatename = name[:name.find('@') + 1]
-        return templatename in units
-    else:
-        return False
+    # Units such as getty@tty1.service appear in list-units only if they are
+    # already running, so we have to check list-unit-files for getty@.service
+    # aswell.
+    name = _canonical_template_unit_name(name)
+    list_unit_file = 'systemctl --full --no-legend --no-pager list-unit-files ' + name
+    matched_files = __salt__['cmd.run_stdout'](list_unit_file)
+    return len(matched_files) > 0
 
 
 def missing(name):

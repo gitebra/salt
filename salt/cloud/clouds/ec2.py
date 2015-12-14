@@ -62,6 +62,9 @@ To use the EC2 cloud module, set up the cloud configuration at
 
       driver: ec2
 
+      # Pass userdata to the instance to be created
+      userdata_file: /etc/salt/my-userdata-file
+
 :depends: requests
 '''
 # pylint: disable=invalid-name,function-redefined
@@ -2014,6 +2017,9 @@ def query_instance(vm_=None, call=None):
         log.debug('Returned query data: {0}'.format(data))
 
         if 'ipAddress' in data[0]['instancesSet']['item']:
+            log.error(
+                'Public IP not detected.  If private IP is meant for bootstrap you must specify "ssh_interface: private_ips" in your profile.'
+            )
             return data
         if ssh_interface(vm_) == 'private_ips' and \
            'privateIpAddress' in data[0]['instancesSet']['item']:
@@ -2106,6 +2112,10 @@ def wait_for_instance(
         win_deploy_auth_retry_delay = config.get_cloud_config_value(
             'win_deploy_auth_retry_delay', vm_, __opts__, default=1
         )
+        use_winrm = config.get_cloud_config_value(
+            'use_winrm', vm_, __opts__, default=False
+        )
+
         if win_passwd and win_passwd == 'auto':
             log.debug('Waiting for auto-generated Windows EC2 password')
             while True:
@@ -2132,20 +2142,55 @@ def wait_for_instance(
                     vm_['win_password'] = win_passwd
                     break
 
+        # SMB used whether winexe or winrm
         if not salt.utils.cloud.wait_for_port(ip_address,
                                               port=445,
                                               timeout=ssh_connect_timeout):
             raise SaltCloudSystemExit(
                 'Failed to connect to remote windows host'
             )
-        if not salt.utils.cloud.validate_windows_cred(ip_address,
-                                                      username,
-                                                      win_passwd,
-                                                      retries=win_deploy_auth_retries,
-                                                      retry_delay=win_deploy_auth_retry_delay):
-            raise SaltCloudSystemExit(
-                'Failed to authenticate against remote windows host'
+
+        # If not using winrm keep same winexe behavior
+        if not use_winrm:
+
+            log.debug('Trying to authenticate via SMB using winexe')
+
+            if not salt.utils.cloud.validate_windows_cred(ip_address,
+                                                          username,
+                                                          win_passwd,
+                                                          retries=win_deploy_auth_retries,
+                                                          retry_delay=win_deploy_auth_retry_delay):
+                raise SaltCloudSystemExit(
+                    'Failed to authenticate against remote windows host (smb)'
+                )
+
+        # If using winrm
+        else:
+
+            # Default HTTPS port can be changed in cloud configuration
+            winrm_port = config.get_cloud_config_value(
+                'winrm_port', vm_, __opts__, default=5986
             )
+
+            # Wait for winrm port to be available
+            if not salt.utils.cloud.wait_for_port(ip_address,
+                                                  port=winrm_port,
+                                                  timeout=ssh_connect_timeout):
+                raise SaltCloudSystemExit(
+                    'Failed to connect to remote windows host (winrm)'
+                )
+
+            log.debug('Trying to authenticate via Winrm using pywinrm')
+
+            if not salt.utils.cloud.wait_for_winrm(ip_address,
+                                                          winrm_port,
+                                                          username,
+                                                          win_passwd,
+                                                          timeout=ssh_connect_timeout):
+                raise SaltCloudSystemExit(
+                    'Failed to authenticate against remote windows host'
+                )
+
     elif salt.utils.cloud.wait_for_port(ip_address,
                                         port=ssh_port,
                                         timeout=ssh_connect_timeout,
@@ -2653,7 +2698,7 @@ def set_tags(name=None,
 
         if resource_id is None:
             if instance_id is None:
-                instance_id = _get_node(name=name, instance_id=None, location=location)[name]['instanceId']
+                instance_id = _get_node(name=name, instance_id=None, location=location)['instanceId']
         else:
             instance_id = resource_id
 
@@ -3881,7 +3926,7 @@ def import_keypair(kwargs=None, call=None):
     '''
     Import an SSH public key.
 
-    .. versionadded:: Boron
+    .. versionadded:: 2015.8.3
     '''
     if call != 'function':
         log.error(
