@@ -170,6 +170,10 @@ class SaltNeutron(NeutronShell):
         resources = self.list_firewall_rules()['firewall_rules']
         return self._fetch(resources, name_or_id)
 
+    def _fetch_firewall(self, name_or_id):
+        resources = self.list_firewalls()['firewalls']
+        return self._fetch(resources, name_or_id)
+
     def get_quotas_tenant(self):
         '''
         Fetches tenant info in server's context
@@ -793,6 +797,61 @@ class SaltNeutron(NeutronShell):
         ret = self.network_conn.delete_firewall_rule(firewall_rule_id)
         return ret if ret else True
 
+    def update_firewall_rule(self, firewall_rule, protocol=None, action=None,
+                             name=None, description=None, ip_version=None,
+                             source_ip_address=None, destination_ip_address=None, source_port=None,
+                             destination_port=None, shared=None, enabled=None):
+        '''
+        Update a firewall rule
+        '''
+        body = {}
+        if protocol:
+            body['protocol'] = protocol
+        if action:
+            body['action'] = action
+        if name:
+            body['name'] = name
+        if description:
+            body['description'] = description
+        if ip_version:
+            body['ip_version'] = ip_version
+        if source_ip_address:
+            body['source_ip_address'] = source_ip_address
+        if destination_ip_address:
+            body['destination_ip_address'] = destination_ip_address
+        if source_port:
+            body['source_port'] = source_port
+        if destination_port:
+            body['destination_port'] = destination_port
+        if shared:
+            body['shared'] = shared
+        if enabled:
+            body['enabled'] = enabled
+        return self.network_conn.update_firewall_rule(firewall_rule, body={'firewall_rule': body})
+
+    def list_firewalls(self):
+        '''
+        Fetches a list of all firewalls for a tenant
+        '''
+        return self.network_conn.list_firewalls()
+
+    def show_firewall(self, firewall):
+        '''
+        Fetches information of a specific firewall
+        '''
+        return self._fetch_firewall(firewall)
+
+    def list_l3_agent_hosting_routers(self, router):
+        '''
+        List L3 agents.
+        '''
+        return self.network_conn.list_l3_agent_hosting_routers(router)
+
+    def list_agents(self):
+        '''
+        List agents.
+        '''
+        return self.network_conn.list_agents()
 
 # The following is a list of functions that need to be incorporated in the
 # neutron module. This list should be updated as functions are added.

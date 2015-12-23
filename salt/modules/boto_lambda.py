@@ -116,11 +116,14 @@ def __virtual__():
     # which was added in boto 2.8.0
     # https://github.com/boto/boto/commit/33ac26b416fbb48a60602542b4ce15dcc7029f12
     if not HAS_BOTO:
-        return False
+        return (False, 'The boto_lambda module could not be loaded: '
+                'boto libraries not found')
     elif _LooseVersion(boto.__version__) < _LooseVersion(required_boto_version):
-        return False
+        return (False, 'The boto_lambda module could not be loaded: '
+                'boto version {0} or later must be installed.'.format(required_boto_version))
     elif _LooseVersion(boto3.__version__) < _LooseVersion(required_boto3_version):
-        return False
+        return (False, 'The boto_lambda module could not be loaded: '
+                'boto version {0} or later must be installed.'.format(required_boto3_version))
     else:
         return True
 
@@ -323,7 +326,7 @@ def update_function_config(FunctionName, Role=None, Handler=None,
         args['Role'] = role_arn
     try:
         conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
-        r = conn.update_function_configuration(*args)
+        r = conn.update_function_configuration(**args)
         if r:
             keys = ('FunctionName', 'Runtime', 'Role', 'Handler', 'CodeSha256',
                 'CodeSize', 'Description', 'Timeout', 'MemorySize', 'FunctionArn',
@@ -482,7 +485,7 @@ def _find_alias(FunctionName, Name, FunctionVersion=None,
     if FunctionVersion:
         args['FunctionVersion'] = FunctionVersion
 
-    for aliases in salt.utils.boto3.paged_call(conn.list_aliases, *args):
+    for aliases in salt.utils.boto3.paged_call(conn.list_aliases, **args):
         for alias in aliases.get('Aliases'):
             if alias['Name'] == Name:
                 return alias
