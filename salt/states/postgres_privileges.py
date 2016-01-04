@@ -21,6 +21,7 @@ Setting the grant option is supported as well.
 .. versionadded:: Boron
 
 .. code-block:: yaml
+
     baruwa:
       postgres_privileges.present:
         - object_name: awl
@@ -34,6 +35,7 @@ Setting the grant option is supported as well.
         - maintenance_db: testdb
 
 .. code-block:: yaml
+
     andrew:
       postgres_privileges.present:
         - object_name: admins
@@ -42,6 +44,7 @@ Setting the grant option is supported as well.
         - maintenance_db: testdb
 
 .. code-block:: yaml
+
     baruwa:
       postgres_privileges.absent:
         - object_name: awl
@@ -54,6 +57,7 @@ Setting the grant option is supported as well.
         - maintenance_db: testdb
 
 .. code-block:: yaml
+
     andrew:
       postgres_privileges.absent:
         - object_name: admins
@@ -75,7 +79,7 @@ def present(name,
             object_type,
             privileges=None,
             grant_option=None,
-            prepend=None,
+            prepend='public',
             maintenance_db=None,
             user=None,
             db_password=None,
@@ -195,7 +199,7 @@ def absent(name,
             object_name,
             object_type,
             privileges=None,
-            prepend=None,
+            prepend='public',
             maintenance_db=None,
             user=None,
             db_password=None,
@@ -239,7 +243,7 @@ def absent(name,
        - DELETE
        - ALL
 
-       NOTE: privileges should not be set when revoking group membership
+       :note: privileges should not be set when revoking group membership
 
     prepend
         Table and Sequence object types live under a schema so this should be
