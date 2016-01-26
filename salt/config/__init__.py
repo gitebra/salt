@@ -60,8 +60,8 @@ else:
     _DFLT_MULTIPROCESSING_MODE = True
 
 FLO_DIR = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            'daemons', 'flo')
+        os.path.dirname(__file__),
+        'daemons', 'flo')
 
 VALID_OPTS = {
     # The address of the salt master. May be specified as IP address or hostname
@@ -511,6 +511,9 @@ VALID_OPTS = {
     # When creating a pillar, there are several strategies to choose from when
     # encountering duplicate values
     'pillar_source_merging_strategy': str,
+
+    # Recursively merge lists by aggregating them instead of replacing them.
+    'pillar_merge_lists': bool,
 
     # How to merge multiple top files from multiple salt environments
     # (saltenvs); can be 'merge' or 'same'
@@ -1067,6 +1070,7 @@ DEFAULT_MASTER_OPTS = {
     'pillar_opts': False,
     'pillar_safe_render_error': True,
     'pillar_source_merging_strategy': 'smart',
+    'pillar_merge_lists': False,
     'ping_on_rotate': False,
     'peer': {},
     'preserve_minion_cache': False,
@@ -2635,9 +2639,17 @@ def is_profile_configured(opts, provider, profile_name):
     provider_key = opts['providers'][alias][driver]
     profile_key = opts['providers'][alias][driver]['profiles'][profile_name]
 
+    # If cloning on Linode, size and image are not necessary.
+    # They are obtained from the to-be-cloned VM.
+    linode_cloning = False
+    if driver == 'linode' and profile_key.get('clonefrom'):
+        linode_cloning = True
+        non_image_drivers.append('linode')
+        non_size_drivers.append('linode')
+
     if driver not in non_image_drivers:
         required_keys.append('image')
-    elif driver == 'vmware':
+    elif driver == 'vmware' or linode_cloning:
         required_keys.append('clonefrom')
     elif driver == 'nova':
         nova_image_keys = ['image', 'block_device_mapping', 'block_device']

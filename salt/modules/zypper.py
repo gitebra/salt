@@ -99,9 +99,28 @@ def list_upgrades(refresh=True):
 list_updates = salt.utils.alias_function(list_upgrades, 'list_updates')
 
 
-def info_installed(*names):
+def info_installed(*names, **kwargs):
     '''
     Return the information of the named package(s), installed on the system.
+
+    :param names:
+        Names of the packages to get information about.
+
+    :param attr:
+        Comma-separated package attributes. If no 'attr' is specified, all available attributes returned.
+
+        Valid attributes are:
+            version, vendor, release, build_date, build_date_time_t, install_date, install_date_time_t,
+            build_host, group, source_rpm, arch, epoch, size, license, signature, packager, url,
+            summary, description.
+
+    :param errors:
+        Handle RPM field errors (true|false). By default, various mistakes in the textual fields are simply ignored and
+        omitted from the data. Otherwise a field with a mistake is not returned, instead a 'N/A (bad UTF-8)'
+        (not available, broken) text is returned.
+
+        Valid attributes are:
+            ignore, report
 
     CLI example:
 
@@ -109,12 +128,21 @@ def info_installed(*names):
 
         salt '*' pkg.info_installed <package1>
         salt '*' pkg.info_installed <package1> <package2> <package3> ...
+        salt '*' pkg.info_installed <package1> attr=version,vendor
+        salt '*' pkg.info_installed <package1> <package2> <package3> ... attr=version,vendor
+        salt '*' pkg.info_installed <package1> <package2> <package3> ... attr=version,vendor errors=true
     '''
     ret = dict()
-    for pkg_name, pkg_nfo in __salt__['lowpkg.info'](*names).items():
+    for pkg_name, pkg_nfo in __salt__['lowpkg.info'](*names, **kwargs).items():
         t_nfo = dict()
         # Translate dpkg-specific keys to a common structure
         for key, value in pkg_nfo.items():
+            if type(value) == str:
+                # Check, if string is encoded in a proper UTF-8
+                value_ = value.decode('UTF-8', 'ignore').encode('UTF-8', 'ignore')
+                if value != value_:
+                    value = kwargs.get('errors') and value_ or 'N/A (invalid UTF-8)'
+                    log.error('Package {0} has bad UTF-8 code in {1}: {2}'.format(pkg_name, key, value))
             if key == 'source_rpm':
                 t_nfo['source'] = value
             else:
@@ -157,7 +185,7 @@ def info_available(*names, **kwargs):
         cmd.extend(batch[:batch_size])
         pkg_info.extend(
             re.split(
-                '----*',
+                'Information for package*',
                 __salt__['cmd.run_stdout'](
                     cmd,
                     output_loglevel='trace',
@@ -170,6 +198,8 @@ def info_available(*names, **kwargs):
     for pkg_data in pkg_info:
         nfo = {}
         for line in [data for data in pkg_data.split('\n') if ':' in data]:
+            if line.startswith('-----'):
+                continue
             kw = [data.strip() for data in line.split(':', 1)]
             if len(kw) == 2 and kw[1]:
                 nfo[kw[0].lower()] = kw[1]
