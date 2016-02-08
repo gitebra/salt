@@ -88,10 +88,7 @@ MOCK_MODULES = [
     'tornado.httpserver',
     'tornado.httputil',
     'tornado.ioloop',
-    'tornado.iostream',
-    'tornado.netutil',
     'tornado.simple_httpclient',
-    'tornado.stack_context',
     'tornado.web',
     'tornado.websocket',
 
@@ -167,10 +164,10 @@ project = 'Salt'
 copyright = '2016 SaltStack, Inc.'
 
 version = salt.version.__version__
-latest_release = '2015.8.4'  # latest release
+latest_release = '2015.8.5'  # latest release
 previous_release = '2015.5.9'  # latest release from previous branch
 previous_release_dir = '2015.5'  # path on web server for previous branch
-build_type = 'develop'  # latest, previous, develop
+build_type = 'latest'  # latest, previous, develop, inactive
 
 # set release to 'version' for develop so sha is used
 # - otherwise -

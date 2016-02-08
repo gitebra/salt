@@ -102,11 +102,7 @@ def update(clear=False):
 
         salt '*' mine.update
     '''
-    m_data = __salt__['config.option']('mine_functions', {})
-    # If we don't have any mine functions configured, then we should just bail out
-    if not m_data:
-        return
-
+    m_data = __salt__['config.merge']('mine_functions', {})
     data = {}
     for func in m_data:
         try:
@@ -203,7 +199,7 @@ def send(func, *args, **kwargs):
     return _mine_send(load, __opts__)
 
 
-def get(tgt, fun, expr_form='glob', exclude_minion=False):
+def get(tgt, fun, expr_form='glob'):
     '''
     Get data from the mine based on the target, function and expr_form
 
@@ -221,9 +217,6 @@ def get(tgt, fun, expr_form='glob', exclude_minion=False):
     Note that all pillar matches, whether using the compound matching system or
     the pillar matching system, will be exact matches, with globbing disabled.
 
-    exclude_minion
-        Excludes the current minion from the result set
-
     CLI Example:
 
     .. code-block:: bash
@@ -231,22 +224,6 @@ def get(tgt, fun, expr_form='glob', exclude_minion=False):
         salt '*' mine.get '*' network.interfaces
         salt '*' mine.get 'os:Fedora' network.interfaces grain
         salt '*' mine.get 'os:Fedora and S@192.168.5.0/24' network.ipaddrs compound
-
-    .. seealso:: Retrieving Mine data from Pillar and Orchestrate
-
-        This execution module is intended to be executed on minions.
-        Master-side operations such as Pillar or Orchestrate that require Mine
-        data should use the :py:mod:`Mine Runner module <salt.runners.mine>`
-        instead; it can be invoked from an SLS file using the
-        :py:func:`saltutil.runner <salt.modules.saltutil.runner>` module. For
-        example:
-
-        .. code-block:: yaml
-
-            {% set minion_ips = salt.saltutil.runner('mine.get',
-                tgt='*',
-                fun='network.ip_addrs',
-                tgt_type='glob') %}
     '''
     if __opts__['file_client'] == 'local':
         ret = {}
@@ -272,11 +249,7 @@ def get(tgt, fun, expr_form='glob', exclude_minion=False):
             'fun': fun,
             'expr_form': expr_form,
     }
-    ret = _mine_get(load, __opts__)
-    if exclude_minion:
-        if __opts__['id'] in ret:
-            del ret[__opts__['id']]
-    return ret
+    return _mine_get(load, __opts__)
 
 
 def delete(fun):
