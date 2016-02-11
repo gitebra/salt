@@ -1087,7 +1087,6 @@ def managed(name,
             defaults=None,
             env=None,
             backup='',
-            show_diff=None,
             show_changes=True,
             create=True,
             contents=None,
@@ -1255,12 +1254,6 @@ def managed(name,
 
     backup
         Overrides the default backup mode for this specific file.
-
-    show_diff
-        DEPRECATED: Please use show_changes.
-
-        If set to ``False``, the diff will not be shown in the return data if
-        changes are made.
 
     show_changes
         Output a unified diff of the old file and the new file. If ``False``
@@ -1533,17 +1526,6 @@ def managed(name,
         return _error(
             ret, 'Specified file {0} is not an absolute path'.format(name))
 
-    if isinstance(env, six.string_types):
-        msg = (
-            'Passing a salt environment should be done using \'saltenv\' not '
-            '\'env\'. This warning will go away in Salt Boron and this '
-            'will be the default and expected behavior. Please update your '
-            'state files.'
-        )
-        salt.utils.warn_until('Boron', msg)
-        ret.setdefault('warnings', []).append(msg)
-        # No need to set __env__ = env since that's done in the state machinery
-
     if os.path.isdir(name):
         ret['comment'] = 'Specified target {0} is a directory'.format(name)
         ret['result'] = False
@@ -1591,14 +1573,6 @@ def managed(name,
         )
     else:
         ret['pchanges'] = {}
-
-    if show_diff is not None:
-        show_changes = show_diff
-        msg = (
-            'The \'show_diff\' argument to the file.managed state has been '
-            'deprecated, please use \'show_changes\' instead.'
-        )
-        salt.utils.warn_until('Boron', msg)
 
     try:
         if __opts__['test']:
@@ -1677,7 +1651,7 @@ def managed(name,
                 backup,
                 makedirs,
                 template,
-                show_diff,
+                show_changes,
                 contents,
                 dir_mode,
                 follow_symlinks)
@@ -1733,7 +1707,7 @@ def managed(name,
                 backup,
                 makedirs,
                 template,
-                show_diff,
+                show_changes,
                 contents,
                 dir_mode,
                 follow_symlinks)
@@ -2286,17 +2260,6 @@ def recurse(name,
     if not os.path.isabs(name):
         return _error(
             ret, 'Specified file {0} is not an absolute path'.format(name))
-
-    if isinstance(env, six.string_types):
-        msg = (
-            'Passing a salt environment should be done using \'saltenv\' not '
-            '\'env\'. This warning will go away in Salt Boron and this '
-            'will be the default and expected behavior. Please update your '
-            'state files.'
-        )
-        salt.utils.warn_until('Boron', msg)
-        ret.setdefault('warnings', []).append(msg)
-        # No need to set __env__ = env since that's done in the state machinery
 
     # expand source into source_list
     source_list = _validate_str_list(source)
@@ -3781,17 +3744,6 @@ def patch(name,
         ret.update(result=True, comment='Patch is already applied')
         return ret
 
-    if isinstance(env, six.string_types):
-        msg = (
-            'Passing a salt environment should be done using \'saltenv\' not '
-            '\'env\'. This warning will go away in Salt Boron and this '
-            'will be the default and expected behavior. Please update your '
-            'state files.'
-        )
-        salt.utils.warn_until('Boron', msg)
-        ret.setdefault('warnings', []).append(msg)
-        # No need to set __env__ = env since that's done in the state machinery
-
     # get cached file or copy it to cache
     cached_source_path = __salt__['cp.cache_file'](source, __env__)
     if not cached_source_path:
@@ -4426,17 +4378,6 @@ def serialize(name,
            'result': True}
     if not name:
         return _error(ret, 'Must provide name to file.serialize')
-
-    if isinstance(env, six.string_types):
-        msg = (
-            'Passing a salt environment should be done using \'saltenv\' not '
-            '\'env\'. This warning will go away in Salt Boron and this '
-            'will be the default and expected behavior. Please update your '
-            'state files.'
-        )
-        salt.utils.warn_until('Boron', msg)
-        ret.setdefault('warnings', []).append(msg)
-        # No need to set __env__ = env since that's done in the state machinery
 
     if not create:
         if not os.path.isfile(name):

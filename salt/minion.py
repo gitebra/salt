@@ -1719,18 +1719,27 @@ class Minion(MinionBase):
                 if self.opts['master_type'] == 'failover':
                     log.info('Trying to tune in to next master from master-list')
 
+                    if hasattr(self, 'pub_channel'):
+                        self.pub_channel.on_recv(None)
+                        if hasattr(self.pub_channel, 'auth'):
+                            self.pub_channel.auth.invalidate()
+                        if hasattr(self.pub_channel, 'close'):
+                            self.pub_channel.close()
+                        del self.pub_channel
+
                     # if eval_master finds a new master for us, self.connected
                     # will be True again on successful master authentication
-                    self.opts['master'] = self.eval_master(opts=self.opts,
-                                                           failed=True)
+                    master, self.pub_channel = yield self.eval_master(
+                                                        opts=self.opts,
+                                                        failed=True)
                     if self.connected:
+                        self.opts['master'] = master
+
                         # re-init the subsystems to work with the new master
                         log.info('Re-initialising subsystems for new '
                                  'master {0}'.format(self.opts['master']))
-                        del self.pub_channel
-                        self._connect_master_future = self.connect_master()
-                        self.block_until_connected()  # TODO: remove  # pylint: disable=no-member
                         self.functions, self.returners, self.function_errors, self.executors = self._load_modules()
+                        self.pub_channel.on_recv(self._handle_payload)
                         self._fire_master_minion_start()
                         log.info('Minion is ready to receive requests!')
 
@@ -1902,6 +1911,9 @@ class Minion(MinionBase):
         if payload is not None and payload['enc'] == 'aes':
             if self._target_load(payload['load']):
                 self._handle_decoded_payload(payload['load'])
+            elif self.opts['zmq_filtering']:
+                # In the filtering enabled case, we'd like to know when minion sees something it shouldnt
+                log.trace('Broadcast message received not for this minion, Load: {0}'.format(payload['load']))
         # If it's not AES, and thus has not been verified, we do nothing.
         # In the future, we could add support for some clearfuncs, but
         # the minion currently has no need.
@@ -1945,6 +1957,8 @@ class Minion(MinionBase):
             del self.schedule
         if hasattr(self, 'pub_channel'):
             self.pub_channel.on_recv(None)
+            if hasattr(self.pub_channel, 'close'):
+                self.pub_channel.close()
             del self.pub_channel
         if hasattr(self, 'periodic_callbacks'):
             for cb in six.itervalues(self.periodic_callbacks):
