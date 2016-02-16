@@ -541,7 +541,14 @@ def mask(name, runtime=False):
                                   redirect_stderr=True)
 
     if out['retcode'] != 0:
+<<<<<<< HEAD
         raise CommandExecutionError('Failed to mask service \'%s\'' % name)
+=======
+        raise CommandExecutionError(
+            'Failed to mask service \'%s\'' % name,
+            info=out['stdout']
+        )
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     return True
 
@@ -755,7 +762,7 @@ def enabled(name, **kwargs):  # pylint: disable=unused-argument
 
 def disabled(name):
     '''
-    Return if the named service is disabled to start on boot
+    Return if the named service is disabled from starting on boot
 
     CLI Example:
 

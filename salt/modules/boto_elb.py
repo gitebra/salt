@@ -85,7 +85,11 @@ def __virtual__():
     Only load if boto libraries exist.
     '''
     if not HAS_BOTO:
+<<<<<<< HEAD
         return False
+=======
+        return (False, "The boto_elb module cannot be loaded: boto library not found")
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
     __utils__['boto.assign_funcs'](__name__, 'elb', module='ec2.elb', pack=__salt__)
     return True
 
@@ -195,7 +199,7 @@ def create(name, availability_zones, listeners=None, subnets=None,
             return False
     except boto.exception.BotoServerError as error:
         log.debug(error)
-        msg = 'Failed to create ELB {0}: {1}'.format(name, error)
+        msg = 'Failed to create ELB {0}: {1}: {2}'.format(name, error.error_code, error.message)
         log.error(msg)
         return False
 
@@ -686,3 +690,252 @@ def get_instance_health(name, region=None, key=None, keyid=None, profile=None, i
     except boto.exception.BotoServerError as error:
         log.debug(error)
         return []
+<<<<<<< HEAD
+=======
+
+
+def create_policy(name, policy_name, policy_type, policy, region=None,
+                  key=None, keyid=None, profile=None):
+    '''
+    Create an ELB policy.
+
+    .. versionadded:: 2016.3.0
+
+    CLI example:
+
+    .. code-block:: bash
+
+        salt myminion boto_elb.create_policy myelb mypolicy LBCookieStickinessPolicyType '{"CookieExpirationPeriod": 3600}'
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    if not exists(name, region, key, keyid, profile):
+        return False
+    try:
+        success = conn.create_lb_policy(name, policy_name, policy_type, policy)
+        if success:
+            log.info('Created policy {0} on ELB {1}'.format(policy_name, name))
+            return True
+        else:
+            msg = 'Failed to create policy {0} on ELB {1}'.format(policy_name, name)
+            log.error(msg)
+            return False
+    except boto.exception.BotoServerError as e:
+        log.debug(e)
+        msg = 'Failed to create policy {0} on ELB {1}: {2}'.format(policy_name, name, e.message)
+        log.error(msg)
+        return False
+
+
+def delete_policy(name, policy_name, region=None, key=None, keyid=None,
+                  profile=None):
+    '''
+    Delete an ELB policy.
+
+    .. versionadded:: 2016.3.0
+
+    CLI example:
+
+    .. code-block:: bash
+
+        salt myminion boto_elb.delete_policy myelb mypolicy
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    if not exists(name, region, key, keyid, profile):
+        return True
+    try:
+        conn.delete_lb_policy(name, policy_name)
+        log.info('Deleted policy {0} on ELB {1}'.format(policy_name, name))
+        return True
+    except boto.exception.BotoServerError as e:
+        log.debug(e)
+        msg = 'Failed to delete policy {0} on ELB {1}: {2}'.format(policy_name, name, e.message)
+        log.error(msg)
+        return False
+
+
+def set_listener_policy(name, port, policies=None, region=None, key=None,
+                        keyid=None, profile=None):
+    '''
+    Set the policies of an ELB listener.
+
+    .. versionadded:: 2016.3.0
+
+    CLI example:
+
+    .. code-block:: Bash
+
+        salt myminion boto_elb.set_listener_policy myelb 443 "[policy1,policy2]"
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    if not exists(name, region, key, keyid, profile):
+        return True
+    if policies is None:
+        policies = []
+    try:
+        conn.set_lb_policies_of_listener(name, port, policies)
+        log.info('Set policies {0} on ELB {1} listener {2}'.format(policies, name, port))
+    except boto.exception.BotoServerError as e:
+        log.debug(e)
+        log.info('Failed to set policy {0} on ELB {1} listener {2}: {3}'.format(policies, name, port, e.message))
+        return False
+    return True
+
+
+def set_backend_policy(name, port, policies=None, region=None, key=None,
+                       keyid=None, profile=None):
+    '''
+    Set the policies of an ELB backend server.
+
+    CLI example:
+
+        salt myminion boto_elb.set_backend_policy myelb 443 "[policy1,policy2]"
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    if not exists(name, region, key, keyid, profile):
+        return True
+    if policies is None:
+        policies = []
+    try:
+        conn.set_lb_policies_of_backend_server(name, port, policies)
+        log.info('Set policies {0} on ELB {1} backend server {2}'.format(policies, name, port))
+    except boto.exception.BotoServerError as e:
+        log.debug(e)
+        log.info('Failed to set policy {0} on ELB {1} backend server {2}: {3}'.format(policies, name, port, e.message))
+        return False
+    return True
+
+
+def set_tags(name, tags, region=None, key=None, keyid=None, profile=None):
+    '''
+    Add the tags on an ELB
+
+    .. versionadded:: 2016.3.0
+
+    name
+        name of the ELB
+
+    tags
+        dict of name/value pair tags
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_elb.set_tags my-elb-name "{'Tag1': 'Value', 'Tag2': 'Another Value'}"
+    '''
+
+    if exists(name, region, key, keyid, profile):
+        conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+        ret = _add_tags(conn, name, tags)
+        return ret
+    else:
+        return False
+
+
+def delete_tags(name, tags, region=None, key=None, keyid=None, profile=None):
+    '''
+    Add the tags on an ELB
+
+    name
+        name of the ELB
+
+    tags
+        list of tags to remove
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_elb.delete_tags my-elb-name ['TagToRemove1', 'TagToRemove2']
+    '''
+    if exists(name, region, key, keyid, profile):
+        conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+        ret = _remove_tags(conn, name, tags)
+        return ret
+    else:
+        return False
+
+
+def _build_tag_param_list(params, tags):
+    '''
+    helper function to build a tag parameter list to send
+    '''
+    keys = sorted(tags.keys())
+    i = 1
+    for key in keys:
+        value = tags[key]
+        params['Tags.member.{0}.Key'.format(i)] = key
+        if value is not None:
+            params['Tags.member.{0}.Value'.format(i)] = value
+        i += 1
+
+
+def _get_all_tags(conn, load_balancer_names=None):
+    '''
+    Retrieve all the metadata tags associated with your ELB(s).
+
+    :type load_balancer_names: list
+    :param load_balancer_names: An optional list of load balancer names.
+
+    :rtype: list
+    :return: A list of :class:`boto.ec2.elb.tag.Tag` objects
+    '''
+    params = {}
+    if load_balancer_names:
+        conn.build_list_params(params, load_balancer_names,
+                               'LoadBalancerNames.member.%d')
+
+    tags = conn.get_object(
+        'DescribeTags',
+        params,
+        __utils__['boto_elb_tag.get_tag_descriptions'](),
+        verb='POST'
+    )
+    if tags[load_balancer_names]:
+        return tags[load_balancer_names]
+    else:
+        return None
+
+
+def _add_tags(conn, load_balancer_names, tags):
+    '''
+    Create new metadata tags for the specified resource ids.
+
+    :type load_balancer_names: list
+    :param load_balancer_names: A list of load balancer names.
+
+    :type tags: dict
+    :param tags: A dictionary containing the name/value pairs.
+                 If you want to create only a tag name, the
+                 value for that tag should be the empty string
+                 (e.g. '').
+    '''
+    params = {}
+    conn.build_list_params(params, load_balancer_names,
+                           'LoadBalancerNames.member.%d')
+    _build_tag_param_list(params, tags)
+    return conn.get_status('AddTags', params, verb='POST')
+
+
+def _remove_tags(conn, load_balancer_names, tags):
+    '''
+    Delete metadata tags for the specified resource ids.
+
+    :type load_balancer_names: list
+    :param load_balancer_names: A list of load balancer names.
+
+    :type tags: list
+    :param tags: A list containing just tag names for the tags to be
+                 deleted.
+    '''
+    params = {}
+    conn.build_list_params(params, load_balancer_names,
+                           'LoadBalancerNames.member.%d')
+    conn.build_list_params(params, tags,
+                           'Tags.member.%d.Key')
+    return conn.get_status('RemoveTags', params, verb='POST')
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b

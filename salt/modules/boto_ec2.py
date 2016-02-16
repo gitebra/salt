@@ -81,10 +81,345 @@ def __virtual__():
     if not HAS_BOTO:
         return False
     elif _LooseVersion(boto.__version__) < _LooseVersion(required_boto_version):
+<<<<<<< HEAD
         return False
     else:
         __utils__['boto.assign_funcs'](__name__, 'ec2', pack=__salt__)
         return True
+=======
+        return (False, "The boto_ec2 module cannot be loaded: boto library version incorrect ")
+    else:
+        __utils__['boto.assign_funcs'](__name__, 'ec2', pack=__salt__)
+        return True
+
+
+def __init__(opts):
+    salt.utils.compat.pack_dunder(__name__)
+    if HAS_BOTO:
+        __utils__['boto.assign_funcs'](__name__, 'ec2')
+
+
+def _get_all_eip_addresses(addresses=None, allocation_ids=None, region=None,
+                           key=None, keyid=None, profile=None):
+    '''
+    Get all EIP's associated with the current credentials.
+
+    addresses
+        (list) - Optional list of addresses.  If provided, only those those in the
+        list will be returned.
+    allocation_ids
+        (list) - Optional list of allocation IDs.  If provided, only the
+        addresses associated with the given allocation IDs will be returned.
+
+    returns
+        (list) - The requested Addresses as a list of :class:`boto.ec2.address.Address`
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    try:
+        return conn.get_all_addresses(addresses=addresses, allocation_ids=allocation_ids)
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return []
+
+
+def get_all_eip_addresses(addresses=None, allocation_ids=None, region=None,
+                           key=None, keyid=None, profile=None):
+    '''
+    Get public addresses of some, or all EIPs associated with the current account.
+
+    addresses
+        (list) - Optional list of addresses.  If provided, only the addresses
+        associated with those in the list will be returned.
+    allocation_ids
+        (list) - Optional list of allocation IDs.  If provided, only the
+        addresses associated with the given allocation IDs will be returned.
+
+    returns
+        (list) - A list of the requested EIP addresses
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.get_all_eip_addresses
+
+    .. versionadded:: 2016.3.0
+    '''
+    return [x.public_ip for x in _get_all_eip_addresses(addresses, allocation_ids, region,
+                key, keyid, profile)]
+
+
+def get_unassociated_eip_address(domain='standard', region=None, key=None,
+                                 keyid=None, profile=None):
+    '''
+    Return the first unassociated EIP
+
+    domain
+        Indicates whether the address is a EC2 address or a VPC address
+        (standard|vpc).
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.get_unassociated_eip_address
+
+    .. versionadded:: 2016.3.0
+    '''
+    eip = None
+    for address in get_all_eip_addresses(region=region, key=key, keyid=keyid,
+                                         profile=profile):
+        address_info = get_eip_address_info(addresses=address, region=region,
+                                            key=key, keyid=keyid,
+                                            profile=profile)[0]
+        if address_info['instance_id']:
+            log.debug('{0} is already associated with the instance {1}'.format(
+                address, address_info['instance_id']))
+            continue
+
+        if address_info['network_interface_id']:
+            log.debug('{0} is already associated with the network interface {1}'
+                      .format(address, address_info['network_interface_id']))
+            continue
+
+        if address_info['domain'] == domain:
+            log.debug("The first unassociated EIP address in the domain '{0}' "
+                      "is {1}".format(domain, address))
+            eip = address
+            break
+
+    if not eip:
+        log.debug('No unassociated Elastic IP found!')
+
+    return eip
+
+
+def get_eip_address_info(addresses=None, allocation_ids=None, region=None, key=None,
+                         keyid=None, profile=None):
+    '''
+    Get 'interesting' info about some, or all EIPs associated with the current account.
+
+    addresses
+        (list) - Optional list of addresses.  If provided, only the addresses
+        associated with those in the list will be returned.
+    allocation_ids
+        (list) - Optional list of allocation IDs.  If provided, only the
+        addresses associated with the given allocation IDs will be returned.
+
+    returns
+        (list of dicts) - A list of dicts, each containing the info for one of the requested EIPs.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.get_eip_address_info addresses=52.4.2.15
+
+    .. versionadded:: 2016.3.0
+    '''
+    if type(addresses) == (type('string')):
+        addresses = [addresses]
+    if type(allocation_ids) == (type('string')):
+        allocation_ids = [allocation_ids]
+
+    ret = _get_all_eip_addresses(addresses=addresses, allocation_ids=allocation_ids,
+                       region=region, key=key, keyid=keyid, profile=profile)
+
+    interesting = ['allocation_id', 'association_id', 'domain', 'instance_id',
+                   'network_interface_id', 'network_interface_owner_id', 'public_ip',
+                   'private_ip_address']
+
+    return [dict([(x, getattr(address, x)) for x in interesting]) for address in ret]
+
+
+def allocate_eip_address(domain=None, region=None, key=None, keyid=None, profile=None):
+    '''
+    Allocate a new Elastic IP address and associate it with your account.
+
+    domain
+        (string) Optional param - if set to exactly 'vpc', the address will be
+        allocated to the VPC.  The default simply maps the EIP to your
+        account container.
+
+    returns
+        (dict) dict of 'interesting' information about the newly allocated EIP,
+        with probably the most interesting keys being 'public_ip'; and
+        'allocation_id' iff 'domain=vpc' was passed.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.allocate_eip_address domain=vpc
+
+    .. versionadded:: 2016.3.0
+    '''
+    if domain and domain != 'vpc':
+        raise SaltInvocationError('The only permitted value for the \'domain\' param is \'vpc\'.')
+
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    try:
+        address = conn.allocate_address(domain=domain)
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return False
+
+    interesting = ['allocation_id', 'association_id', 'domain', 'instance_id',
+                   'network_interface_id', 'network_interface_owner_id', 'public_ip',
+                   'private_ip_address']
+
+    return dict([(x, getattr(address, x)) for x in interesting])
+
+
+def release_eip_address(public_ip=None, allocation_id=None, region=None, key=None,
+                        keyid=None, profile=None):
+    '''
+    Free an Elastic IP address.  Pass either a public IP address to release a 'standard'
+    EC2 Elastic IP address, or an AllocationId to release a VPC Elastic IP address.
+
+    public_ip
+        (string) - The public IP address - for EC2 elastic IPs.
+    allocation_id
+        (string) - The Allocation ID - for VPC elastic IPs.
+
+    returns
+        (bool) - True on success, False on failure
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.release_eip_address allocation_id=eipalloc-ef382c8a
+
+    .. versionadded:: 2016.3.0
+    '''
+    if not salt.utils.exactly_one((public_ip, allocation_id)):
+        raise SaltInvocationError('Exactly one (but not both) of \'public_ip\' '
+                                  'or \'allocation_id\' must be provided')
+
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    try:
+        return conn.release_address(public_ip, allocation_id)
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return False
+
+
+def associate_eip_address(instance_id=None, instance_name=None, public_ip=None,
+                          allocation_id=None, network_interface_id=None,
+                          network_interface_name=None, private_ip_address=None,
+                          allow_reassociation=False, region=None, key=None,
+                          keyid=None, profile=None):
+    '''
+    Associate an Elastic IP address with a currently running instance or a network interface.
+    This requires exactly one of either 'public_ip' or 'allocation_id', depending
+    on whether you’re associating a VPC address or a plain EC2 address.
+
+    instance_id
+        (string) – ID of the instance to associate with (exclusive with 'instance_name')
+    instance_name
+        (string) – Name tag of the instance to associate with (exclusive with 'instance_id')
+    public_ip
+        (string) – Public IP address, for standard EC2 based allocations.
+    allocation_id
+        (string) – Allocation ID for a VPC-based EIP.
+    network_interface_id
+        (string) - ID of the network interface to associate the EIP with
+    network_interface_name
+        (string) - Name of the network interface to associate the EIP with
+    private_ip_address
+        (string) – The primary or secondary private IP address to associate with the Elastic IP address.
+    allow_reassociation
+        (bool)   – Allow a currently associated EIP to be re-associated with the new instance or interface.
+
+    returns
+        (bool)   - True on success, False otherwise
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.associate_eip_address instance_name=bubba.ho.tep allocation_id=eipalloc-ef382c8a
+
+    .. versionadded:: 2016.3.0
+    '''
+    if not salt.utils.exactly_one((instance_id, instance_name,
+                                   network_interface_id,
+                                   network_interface_name)):
+        raise SaltInvocationError("Exactly one of 'instance_id', "
+                                  "'instance_name', 'network_interface_id', "
+                                  "'network_interface_name' must be provided")
+
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    if instance_name:
+        try:
+            instance_id = get_id(name=instance_name, region=region, key=key,
+                                 keyid=keyid, profile=profile)
+        except boto.exception.BotoServerError as e:
+            log.error(e)
+            return False
+        if not instance_id:
+            log.error("Given instance_name '{0}' cannot be mapped to an "
+                      "instance_id".format(instance_name))
+            return False
+
+    if network_interface_name:
+        try:
+            network_interface_id = get_network_interface_id(
+                network_interface_name, region=region, key=key, keyid=keyid,
+                profile=profile)
+        except boto.exception.BotoServerError as e:
+            log.error(e)
+            return False
+        if not network_interface_id:
+            log.error("Given network_interface_name '{0}' cannot be mapped to "
+                      "an network_interface_id".format(network_interface_name))
+            return False
+
+    try:
+        return conn.associate_address(instance_id=instance_id, public_ip=public_ip,
+              allocation_id=allocation_id, network_interface_id=network_interface_id,
+              private_ip_address=private_ip_address, allow_reassociation=allow_reassociation)
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return False
+
+
+def disassociate_eip_address(public_ip=None, association_id=None, region=None,
+                             key=None, keyid=None, profile=None):
+    '''
+    Disassociate an Elastic IP address from a currently running instance. This
+    requires exactly one of either 'association_id' or 'public_ip', depending
+    on whether you’re associating a VPC address or a plain EC2 address.
+
+    public_ip
+        (string) – Public IP address, for standard EC2 based allocations.
+    association_id
+        (string) – Association ID for a VPC-based EIP.
+
+    returns
+        (bool)   - True on success, False otherwise
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.disassociate_eip_address association_id=eipassoc-e3ba2d16
+
+    .. versionadded:: 2016.3.0
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    try:
+        return conn.disassociate_address(public_ip, association_id)
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return False
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
 
 def get_zones(region=None, key=None, keyid=None, profile=None):
@@ -502,3 +837,379 @@ def set_attribute(attribute, attribute_value, instance_name=None, instance_id=No
     except boto.exception.BotoServerError as exc:
         log.error(exc)
         return False
+<<<<<<< HEAD
+=======
+
+
+def get_network_interface_id(name, region=None, key=None, keyid=None,
+                             profile=None):
+    '''
+    Get an Elastic Network Interface id from its name tag.
+
+    .. versionadded:: 2016.3.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.get_network_interface_id name=my_eni
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    r = {}
+    try:
+        enis = conn.get_all_network_interfaces(filters={'tag:Name': name})
+        if not enis:
+            r['error'] = {'message': 'No ENIs found.'}
+        elif len(enis) > 1:
+            r['error'] = {'message': 'Name specified is tagged on multiple ENIs.'}
+        else:
+            eni = enis[0]
+            r['result'] = eni.id
+    except boto.exception.EC2ResponseError as e:
+        r['error'] = __utils__['boto.get_error'](e)
+    return r
+
+
+def get_network_interface(name=None, network_interface_id=None, region=None,
+                          key=None, keyid=None, profile=None):
+    '''
+    Get an Elastic Network Interface.
+
+    .. versionadded:: 2016.3.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.get_network_interface name=my_eni
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    r = {}
+    result = _get_network_interface(conn, name, network_interface_id)
+    if 'error' in result:
+        if result['error']['message'] == 'No ENIs found.':
+            r['result'] = None
+            return r
+        return result
+    eni = result['result']
+    r['result'] = _describe_network_interface(eni)
+    return r
+
+
+def _get_network_interface(conn, name=None, network_interface_id=None):
+    r = {}
+    if not (name or network_interface_id):
+        raise SaltInvocationError(
+            'Either name or network_interface_id must be provided.'
+        )
+    try:
+        if network_interface_id:
+            enis = conn.get_all_network_interfaces([network_interface_id])
+        else:
+            enis = conn.get_all_network_interfaces(filters={'tag:Name': name})
+
+        if not enis:
+            r['error'] = {'message': 'No ENIs found.'}
+        elif len(enis) > 1:
+            r['error'] = {'message': 'Name specified is tagged on multiple ENIs.'}
+        else:
+            eni = enis[0]
+            r['result'] = eni
+    except boto.exception.EC2ResponseError as e:
+        r['error'] = __utils__['boto.get_error'](e)
+    return r
+
+
+def _describe_network_interface(eni):
+    r = {}
+    for attr in ['status', 'description', 'availability_zone', 'requesterId',
+                 'requester_managed', 'mac_address', 'private_ip_address',
+                 'vpc_id', 'id', 'source_dest_check', 'owner_id', 'tags',
+                 'subnet_id', 'associationId', 'publicDnsName', 'owner_id',
+                 'ipOwnerId', 'publicIp', 'allocationId']:
+        if hasattr(eni, attr):
+            r[attr] = getattr(eni, attr)
+    r['region'] = eni.region.name
+    r['groups'] = []
+    for group in eni.groups:
+        r['groups'].append({'name': group.name, 'id': group.id})
+    r['private_ip_addresses'] = []
+    for address in eni.private_ip_addresses:
+        r['private_ip_addresses'].append(
+            {'private_ip_address': address.private_ip_address,
+             'primary': address.primary}
+        )
+    r['attachment'] = {}
+    for attr in ['status', 'attach_time', 'device_index',
+                 'delete_on_termination', 'instance_id',
+                 'instance_owner_id', 'id']:
+        if hasattr(eni.attachment, attr):
+            r['attachment'][attr] = getattr(eni.attachment, attr)
+    return r
+
+
+def create_network_interface(name, subnet_id=None, subnet_name=None,
+                             private_ip_address=None, description=None,
+                             groups=None, region=None, key=None, keyid=None,
+                             profile=None):
+    '''
+    Create an Elastic Network Interface.
+
+    .. versionadded:: 2016.3.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.create_network_interface my_eni subnet-12345 description=my_eni groups=['my_group']
+    '''
+    if not salt.utils.exactly_one((subnet_id, subnet_name)):
+        raise SaltInvocationError('One (but not both) of subnet_id or '
+                                  'subnet_name must be provided.')
+
+    if subnet_name:
+        resource = __salt__['boto_vpc.get_resource_id']('subnet', subnet_name,
+                                                        region=region, key=key,
+                                                        keyid=keyid,
+                                                        profile=profile)
+        if 'id' not in resource:
+            log.warning('Couldn\'t resolve subnet name {0}.').format(
+                subnet_name)
+            return False
+        subnet_id = resource['id']
+
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    r = {}
+    result = _get_network_interface(conn, name)
+    if 'result' in result:
+        r['error'] = {'message': 'An ENI with this Name tag already exists.'}
+        return r
+    vpc_id = __salt__['boto_vpc.get_subnet_association'](
+        [subnet_id], region=region, key=key, keyid=keyid, profile=profile
+    )
+    vpc_id = vpc_id.get('vpc_id')
+    if not vpc_id:
+        msg = 'subnet_id {0} does not map to a valid vpc id.'.format(subnet_id)
+        r['error'] = {'message': msg}
+        return r
+    _groups = __salt__['boto_secgroup.convert_to_group_ids'](
+        groups, vpc_id=vpc_id, region=region, key=key,
+        keyid=keyid, profile=profile
+    )
+    try:
+        eni = conn.create_network_interface(
+            subnet_id,
+            private_ip_address=private_ip_address,
+            description=description,
+            groups=_groups
+        )
+        eni.add_tag('Name', name)
+    except boto.exception.EC2ResponseError as e:
+        r['error'] = __utils__['boto.get_error'](e)
+        return r
+    r['result'] = _describe_network_interface(eni)
+    return r
+
+
+def delete_network_interface(
+        name=None, network_interface_id=None, region=None, key=None,
+        keyid=None, profile=None):
+    '''
+    Create an Elastic Network Interface.
+
+    .. versionadded:: 2016.3.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.create_network_interface my_eni subnet-12345 description=my_eni groups=['my_group']
+    '''
+    if not (name or network_interface_id):
+        raise SaltInvocationError(
+            'Either name or network_interface_id must be provided.'
+        )
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    r = {}
+    result = _get_network_interface(conn, name, network_interface_id)
+    if 'error' in result:
+        return result
+    eni = result['result']
+    try:
+        info = _describe_network_interface(eni)
+        network_interface_id = info['id']
+    except KeyError:
+        r['error'] = {'message': 'ID not found for this network interface.'}
+        return r
+    try:
+        r['result'] = conn.delete_network_interface(network_interface_id)
+    except boto.exception.EC2ResponseError as e:
+        r['error'] = __utils__['boto.get_error'](e)
+    return r
+
+
+def attach_network_interface(device_index, name=None, network_interface_id=None,
+                             instance_name=None, instance_id=None,
+                             region=None, key=None, keyid=None, profile=None):
+    '''
+    Attach an Elastic Network Interface.
+
+    .. versionadded:: 2016.3.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.attach_network_interface my_eni instance_name=salt-master device_index=0
+    '''
+    if not salt.utils.exactly_one((name, network_interface_id)):
+        raise SaltInvocationError(
+            "Exactly one (but not both) of 'name' or 'network_interface_id' "
+            "must be provided."
+        )
+
+    if not salt.utils.exactly_one((instance_name, instance_id)):
+        raise SaltInvocationError(
+            "Exactly one (but not both) of 'instance_name' or 'instance_id' "
+            "must be provided."
+        )
+
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    r = {}
+    result = _get_network_interface(conn, name, network_interface_id)
+    if 'error' in result:
+        return result
+    eni = result['result']
+    try:
+        info = _describe_network_interface(eni)
+        network_interface_id = info['id']
+    except KeyError:
+        r['error'] = {'message': 'ID not found for this network interface.'}
+        return r
+
+    if instance_name:
+        try:
+            instance_id = get_id(name=instance_name, region=region, key=key,
+                                 keyid=keyid, profile=profile)
+        except boto.exception.BotoServerError as e:
+            log.error(e)
+            return False
+
+    try:
+        r['result'] = conn.attach_network_interface(
+            network_interface_id, instance_id, device_index
+        )
+    except boto.exception.EC2ResponseError as e:
+        r['error'] = __utils__['boto.get_error'](e)
+    return r
+
+
+def detach_network_interface(
+        name=None, network_interface_id=None, attachment_id=None,
+        force=False, region=None, key=None, keyid=None, profile=None):
+    '''
+    Detach an Elastic Network Interface.
+
+    .. versionadded:: 2016.3.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.detach_network_interface my_eni
+    '''
+    if not (name or network_interface_id or attachment_id):
+        raise SaltInvocationError(
+            'Either name or network_interface_id or attachment_id must be'
+            ' provided.'
+        )
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    r = {}
+    if not attachment_id:
+        result = _get_network_interface(conn, name, network_interface_id)
+        if 'error' in result:
+            return result
+        eni = result['result']
+        info = _describe_network_interface(eni)
+        try:
+            attachment_id = info['attachment']['id']
+        except KeyError:
+            r['error'] = {'message': 'Attachment id not found for this ENI.'}
+            return r
+    try:
+        r['result'] = conn.detach_network_interface(attachment_id, force)
+    except boto.exception.EC2ResponseError as e:
+        r['error'] = __utils__['boto.get_error'](e)
+    return r
+
+
+def modify_network_interface_attribute(
+        name=None, network_interface_id=None, attr=None,
+        value=None, region=None, key=None, keyid=None, profile=None):
+    '''
+    Modify an attribute of an Elastic Network Interface.
+
+    .. versionadded:: 2016.3.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.modify_network_interface_attribute my_eni attr=description value='example description'
+    '''
+    if not (name or network_interface_id):
+        raise SaltInvocationError(
+            'Either name or network_interface_id must be provided.'
+        )
+    if attr is None and value is None:
+        raise SaltInvocationError(
+            'attr and value must be provided.'
+        )
+    r = {}
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    result = _get_network_interface(conn, name, network_interface_id)
+    if 'error' in result:
+        return result
+    eni = result['result']
+    info = _describe_network_interface(eni)
+    network_interface_id = info['id']
+    # munge attr into what the API requires
+    if attr == 'groups':
+        _attr = 'groupSet'
+    elif attr == 'source_dest_check':
+        _attr = 'sourceDestCheck'
+    elif attr == 'delete_on_termination':
+        _attr = 'deleteOnTermination'
+    else:
+        _attr = attr
+    _value = value
+    if info.get('vpc_id') and _attr == 'groupSet':
+        _value = __salt__['boto_secgroup.convert_to_group_ids'](
+            value, vpc_id=info.get('vpc_id'), region=region, key=key,
+            keyid=keyid, profile=profile
+        )
+        if not _value:
+            r['error'] = {
+                'message': ('Security groups do not map to valid security'
+                            ' group ids')
+            }
+            return r
+    _attachment_id = None
+    if _attr == 'deleteOnTermination':
+        try:
+            _attachment_id = info['attachment']['id']
+        except KeyError:
+            r['error'] = {
+                'message': ('No attachment id found for this ENI. The ENI must'
+                            ' be attached before delete_on_termination can be'
+                            ' modified')
+            }
+            return r
+    try:
+        r['result'] = conn.modify_network_interface_attribute(
+            network_interface_id, _attr, _value, attachment_id=_attachment_id
+        )
+    except boto.exception.EC2ResponseError as e:
+        r['error'] = __utils__['boto.get_error'](e)
+    return r
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b

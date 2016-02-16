@@ -38,9 +38,9 @@ def get_pillar(opts, grains, id_, saltenv=None, ext=None, env=None, funcs=None,
     '''
     if env is not None:
         salt.utils.warn_until(
-            'Boron',
+            'Carbon',
             'Passing a salt environment should be done using \'saltenv\' '
-            'not \'env\'. This functionality will be removed in Salt Boron.'
+            'not \'env\'. This functionality will be removed in Salt Carbon.'
         )
         # Backwards compatibility
         saltenv = env
@@ -53,9 +53,13 @@ def get_pillar(opts, grains, id_, saltenv=None, ext=None, env=None, funcs=None,
     if opts['pillar_cache']:
         log.info('Compiling pillar from cache')
         log.debug('get_pillar using pillar cache with ext: {0}'.format(ext))
-        return PillarCache(opts, grains, id_, saltenv, ext=ext, functions=funcs,
+        return PillarCache(opts, grains, minion_id, saltenv, ext=ext, functions=funcs,
                 pillar=pillar, pillarenv=pillarenv)
+<<<<<<< HEAD
     return ptype(opts, grains, id_, saltenv, ext, functions=funcs,
+=======
+    return ptype(opts, grains, minion_id, saltenv, ext, functions=funcs,
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
                  pillar=pillar, pillarenv=pillarenv)
 
 
@@ -67,9 +71,9 @@ def get_async_pillar(opts, grains, id_, saltenv=None, ext=None, env=None, funcs=
     '''
     if env is not None:
         salt.utils.warn_until(
-            'Boron',
+            'Carbon',
             'Passing a salt environment should be done using \'saltenv\' '
-            'not \'env\'. This functionality will be removed in Salt Boron.'
+            'not \'env\'. This functionality will be removed in Salt Carbon.'
         )
         # Backwards compatibility
         saltenv = env
@@ -329,10 +333,10 @@ class Pillar(object):
         '''
         if env is not None:
             salt.utils.warn_until(
-                'Boron',
+                'Carbon',
                 'Passing a salt environment should be done using \'saltenv\' '
                 'not \'env\'. This functionality will be removed in Salt '
-                'Boron.'
+                'Carbon.'
             )
             # Backwards compatibility
             saltenv = env
@@ -724,6 +728,8 @@ class Pillar(object):
             if not isinstance(run, dict):
                 log.critical('The "ext_pillar" option is malformed')
                 return {}
+            if run.keys()[0] in self.opts.get('exclude_ext_pillar', []):
+                continue
             for key, val in six.iteritems(run):
                 if key not in self.ext_pillars:
                     err = ('Specified ext_pillar interface {0} is '

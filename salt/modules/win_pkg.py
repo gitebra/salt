@@ -583,8 +583,15 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
         if 'latest' in pkginfo:
             latest.append(pkg_name)
 
+<<<<<<< HEAD
         # Get the installer
         installer = pkginfo[version_num].get('installer')
+=======
+        # Get the installer settings from winrepo.p
+        installer = pkginfo[version_num].get('installer', False)
+        cache_dir = pkginfo[version_num].get('cache_dir', False)
+        cache_file = pkginfo[version_num].get('cache_file', False)
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
         # Is there an installer configured?
         if not installer:

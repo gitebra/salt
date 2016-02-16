@@ -1371,6 +1371,7 @@ def idrac_general(blade_name, command, idrac_password=None,
         return ret
 
 
+<<<<<<< HEAD
 def bare_rac_cmd(cmd, host=None,
                 admin_username=None, admin_password=None):
 
@@ -1385,6 +1386,8 @@ def bare_rac_cmd(cmd, host=None,
         return ret
 
 
+=======
+>>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 def _update_firmware(cmd,
                      host=None,
                      admin_username=None,
