@@ -112,7 +112,7 @@ and one using cinder volumes already attached
     centos7-2-iad-rackspace:
       provider: rackspace-iad
       size: general1-2
-      block_volume: <volume id>
+      boot_volume: <volume id>
 
     # create the volume from a snapshot
     centos7-2-iad-rackspace:
@@ -522,6 +522,7 @@ def destroy(name, conn=None, call=None):
             salt.utils.cloud.remove_sshkey(getattr(node, __opts__.get('ssh_interface', 'public_ips'))[0])
         if __opts__.get('update_cachedir', False) is True:
             salt.utils.cloud.delete_minion_cachedir(name, __active_provider_name__.split(':')[0], __opts__)
+        salt.utils.cloud.cachedir_index_del(name)
         return True
 
     log.error('Failed to Destroy VM: {0}'.format(name))
@@ -807,16 +808,16 @@ def create(vm_):
         private = node.get('private_ips', [])
         public = node.get('public_ips', [])
         if private and not public:
-            log.warn(
+            log.warning(
                 'Private IPs returned, but not public... Checking for '
                 'misidentified IPs'
             )
             for private_ip in private:
                 private_ip = preferred_ip(vm_, [private_ip])
                 if salt.utils.cloud.is_public_ip(private_ip):
-                    log.warn('{0} is a public IP'.format(private_ip))
+                    log.warning('{0} is a public IP'.format(private_ip))
                     data.public_ips.append(private_ip)
-                    log.warn(
+                    log.warning(
                         (
                             'Public IP address was not ready when we last'
                             ' checked.  Appending public IP address now.'
@@ -824,7 +825,7 @@ def create(vm_):
                     )
                     public = data.public_ips
                 else:
-                    log.warn('{0} is a private IP'.format(private_ip))
+                    log.warning('{0} is a private IP'.format(private_ip))
                     ignore_ip = ignore_cidr(vm_, private_ip)
                     if private_ip not in data.private_ips and not ignore_ip:
                         result.append(private_ip)
@@ -912,7 +913,9 @@ def create(vm_):
         },
         transport=__opts__['transport']
     )
-
+    salt.utils.cloud.cachedir_index_add(
+    vm_['name'], vm_['profile'], 'nova', vm_['driver']
+    )
     return ret
 
 

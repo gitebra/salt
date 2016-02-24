@@ -299,6 +299,12 @@ def _compare(actual, create_kwargs):
                             )
                         else:
                             bind_def = container_port
+                    # The any address (0.0.0.0) is omitted from the
+                    # actual_binds comparison key, so be sure to
+                    # strip it from the desired_binds comparison
+                    # key if it's included.
+                    if bind_def.startswith('0.0.0.0:'):
+                        bind_def = bind_def.replace('0.0.0.0:', '')
                     desired_binds.append(bind_def)
             actual_binds.sort()
             desired_binds.sort()
@@ -1110,6 +1116,22 @@ def running(name,
             These LXC configuration parameters will only have the desired
             effect if the container is using the LXC execution driver, which
             has not been the default for some time.
+
+    security_opt:
+        Security configuration for MLS systems such as SELinux and AppArmor.
+
+        .. code-block:: yaml
+
+            foo:
+              dockerng.running:
+                - image: bar/baz:latest
+                - security_opts:
+                  - 'apparmor:unconfined'
+
+        .. note::
+
+            See the documentation for security_opt at
+            https://docs.docker.com/engine/reference/run/#security-configuration
 
     publish_all_ports : False
         Allocates a random host port for each port exposed using the ``ports``
