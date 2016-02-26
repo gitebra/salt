@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 '''
 A module to manage software on Windows
-
-:depends:   - win32com
-            - win32con
-            - win32api
-            - pywintypes
 '''
 
 # Import python libs
@@ -20,8 +15,8 @@ from distutils.version import LooseVersion  # pylint: disable=import-error,no-na
 import salt.ext.six as six
 # pylint: disable=import-error
 try:
-    import win32api
-    import win32con
+    from salt.ext.six.moves import winreg as _winreg  # pylint: disable=import-error,no-name-in-module
+    from salt.ext.six.moves.urllib.parse import urlparse as _urlparse  # pylint: disable=import-error,no-name-in-module
     HAS_DEPENDENCIES = True
 except ImportError:
     HAS_DEPENDENCIES = False
@@ -30,10 +25,9 @@ try:
 except ImportError:
     import msgpack_pure as msgpack
 # pylint: enable=import-error
-import shlex
 
 # Import salt libs
-from salt.exceptions import CommandExecutionError, SaltRenderError
+from salt.exceptions import CommandExecutionError, SaltInvocationError, SaltRenderError
 import salt.utils
 import salt.syspaths
 from salt.exceptions import MinionError
@@ -50,7 +44,7 @@ def __virtual__():
     '''
     if salt.utils.is_windows() and HAS_DEPENDENCIES:
         return __virtualname__
-    return False
+    return (False, "Module win_pkg: module only works on Windows systems")
 
 
 def latest_version(*names, **kwargs):
@@ -235,9 +229,19 @@ def list_pkgs(versions_as_list=False, **kwargs):
 
     ret = {}
     name_map = _get_name_map()
-    for key, val in six.iteritems(_get_reg_software()):
-        if key in name_map:
-            key = name_map[key]
+    for pkg_name, val in six.iteritems(_get_reg_software()):
+        if pkg_name in name_map:
+            key = name_map[pkg_name]
+            if val in ['Not Found', None, False]:
+                # Look up version from winrepo
+                pkg_info = _get_package_info(key)
+                if not pkg_info:
+                    continue
+                for pkg_ver in pkg_info.keys():
+                    if pkg_info[pkg_ver]['full_name'] == pkg_name:
+                        val = pkg_ver
+        else:
+            key = pkg_name
         __salt__['pkg_resource.add_pkg'](ret, key, val)
 
     __salt__['pkg_resource.sort_pkglist'](ret)
@@ -268,62 +272,22 @@ def _get_reg_software():
     display name as the key and the version as the value
     '''
     reg_software = {}
-    # This is a list of default OS reg entries that don't seem to be installed
-    # software and no version information exists on any of these items
-    ignore_list = ['AddressBook',
-                   'Connection Manager',
-                   'DirectDrawEx',
-                   'Fontcore',
-                   'IE40',
-                   'IE4Data',
-                   'IE5BAKEX',
-                   'IEData',
-                   'MobileOptionPack',
-                   'SchedulingAgent',
-                   'WIC'
-                   ]
-    encoding = locale.getpreferredencoding()
 
     #attempt to corral the wild west of the multiple ways to install
     #software in windows
     reg_entries = dict(_get_machine_keys().items())
     for reg_hive, reg_keys in six.iteritems(reg_entries):
         for reg_key in reg_keys:
-            try:
-                reg_handle = win32api.RegOpenKeyEx(
-                    reg_hive,
-                    reg_key,
-                    0,
-                    win32con.KEY_READ)
-            except Exception:
-                pass
-                # Uninstall key may not exist for all users
-            for name, num, blank, time in win32api.RegEnumKeyEx(reg_handle):
-                prd_uninst_key = "\\".join([reg_key, name])
-                # These reg values aren't guaranteed to exist
-                windows_installer = _get_reg_value(
-                    reg_hive,
-                    prd_uninst_key,
-                    'WindowsInstaller')
 
-                prd_name = _get_reg_value(
-                    reg_hive,
-                    prd_uninst_key,
-                    "DisplayName")
-                try:
-                    prd_name = prd_name.decode(encoding)
-                except Exception:
-                    pass
-                prd_ver = _get_reg_value(
-                    reg_hive,
-                    prd_uninst_key,
-                    "DisplayVersion")
-                if name not in ignore_list:
-                    if prd_name != 'Not Found':
-                        # some MS Office updates don't register a product name which means
-                        # their information is useless
-                        if prd_name != '':
-                            reg_software[prd_name] = prd_ver
+            reg_handle = _open_registry_key(reg_hive, reg_key)
+            if reg_handle is None:
+                continue
+
+            products = _get_product_information(reg_hive, reg_key, reg_handle)
+            reg_software.update(products)
+
+            _winreg.CloseKey(reg_handle)
+
     return reg_software
 
 
@@ -338,25 +302,97 @@ def _get_machine_keys():
         "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
         "Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
     ]
-    machine_hive = win32con.HKEY_LOCAL_MACHINE
+    machine_hive = _winreg.HKEY_LOCAL_MACHINE
     machine_hive_and_keys[machine_hive] = machine_keys
     return machine_hive_and_keys
 
 
-def _get_reg_value(reg_hive, reg_key, value_name=''):
-    '''
-    Read one value from Windows registry.
-    If 'name' is empty map, reads default value.
-    '''
+def _open_registry_key(reg_hive, reg_key):
+    reg_handle = None
     try:
-        key_handle = win32api.RegOpenKeyEx(
-            reg_hive, reg_key, 0, win32con.KEY_ALL_ACCESS)
-        value_data, value_type = win32api.RegQueryValueEx(key_handle,
-                                                          value_name)
-        win32api.RegCloseKey(key_handle)
+        flags = _get_flags(reg_hive)
+
+        reg_handle = _winreg.OpenKeyEx(
+            reg_hive,
+            reg_key,
+            0,
+            flags)
+    # Unsinstall key may not exist for all users
     except Exception:
-        value_data = 'Not Found'
-    return value_data
+        pass
+
+    return reg_handle
+
+
+def _get_flags(reg_hive):
+    try:
+        reflect = _winreg.QueryReflectionKey(reg_hive)
+    except NotImplemented:
+        flags = reg_hive
+    else:
+        if reflect:
+            flags = _winreg.KEY_READ | _winreg.KEY_WOW64_64KEY
+        else:
+            flags = _winreg.KEY_READ | _winreg.KEY_WOW64_32KEY
+
+    return flags
+
+
+def _get_product_information(reg_hive, reg_key, reg_handle):
+
+    # This is a list of default OS reg entries that don't seem to be installed
+    # software and no version information exists on any of these items
+    # Also, some MS Office updates don't register a product name which means
+    # their information is useless.
+    ignore_list = ['AddressBook',
+                   'Connection Manager',
+                   'DirectDrawEx',
+                   'Fontcore',
+                   'IE40',
+                   'IE4Data',
+                   'IE5BAKEX',
+                   'IEData',
+                   'MobileOptionPack',
+                   'SchedulingAgent',
+                   'WIC',
+                   'Not Found']
+    encoding = locale.getpreferredencoding()
+
+    products = {}
+    try:
+        i = 0
+        while True:
+            product_key = None
+            asubkey = _winreg.EnumKey(reg_handle, i)
+            rd_uninst_key = "\\".join([reg_key, asubkey])
+            displayName = ''
+            displayVersion = ''
+            try:
+                # these are not garuanteed to exist
+                product_key = _open_registry_key(reg_hive, rd_uninst_key)
+                displayName, value_type = _winreg.QueryValueEx(product_key, "DisplayName")
+                try:
+                    displayName = displayName.decode(encoding)
+                except Exception:
+                    pass
+                displayVersion, value_type = _winreg.QueryValueEx(product_key, "DisplayVersion")
+            except Exception:
+                pass
+
+            if product_key is not None:
+                _winreg.CloseKey(product_key)
+            i += 1
+
+            if displayName not in ignore_list:
+                # some MS Office updates don't register a product name which means
+                # their information is useless
+                if displayName != '':
+                    products[displayName] = displayVersion
+
+    except WindowsError:  # pylint: disable=E0602
+        pass
+
+    return products
 
 
 def refresh_db(saltenv='base'):
@@ -465,19 +501,50 @@ def genrepo(saltenv='base'):
     return ret
 
 
-def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
+def _get_source_sum(source_hash, file_path, saltenv):
     '''
+    Extract the hash sum, whether it is in a remote hash file, or just a string.
+    '''
+    ret = dict()
+    schemes = ('salt', 'http', 'https', 'ftp', 'swift', 's3', 'file')
+    invalid_hash_msg = ("Source hash '{0}' format is invalid. It must be in the format"
+                        ' <hash type>=<hash>').format(source_hash)
+    source_hash = str(source_hash)
+    source_hash_scheme = _urlparse(source_hash).scheme
+
+    if source_hash_scheme in schemes:
+        # The source_hash is a file on a server
+        cached_hash_file = __salt__['cp.cache_file'](source_hash, saltenv)
+
+        if not cached_hash_file:
+            raise CommandExecutionError(('Source hash file {0} not'
+                                         ' found').format(source_hash))
+
+        ret = __salt__['file.extract_hash'](cached_hash_file, '', file_path)
+        if ret is None:
+            raise SaltInvocationError(invalid_hash_msg)
+    else:
+        # The source_hash is a hash string
+        items = source_hash.split('=', 1)
+
+        if len(items) != 2:
+            invalid_hash_msg = ('{0}, or it must be a supported protocol'
+                                ': {1}').format(invalid_hash_msg, ', '.join(schemes))
+            raise SaltInvocationError(invalid_hash_msg)
+
+        ret['hash_type'], ret['hsum'] = [item.strip().lower() for item in items]
+
+    return ret
+
+
+def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
+    r'''
     Install the passed package(s) on the system using winrepo
 
     :param name:
         The name of a single package, or a comma-separated list of packages to
         install. (no spaces after the commas)
     :type name: str, list, or None
-
-    :param str version:
-        The specific version to install. If omitted, the latest version will be
-        installed. If passed with multiple install, the version will apply to
-        all packages. Recommended for single installation only.
 
     :param bool refresh: Boolean value representing whether or not to refresh
         the winrepo db
@@ -489,8 +556,24 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
 
     :param str saltenv: The salt environment to use. Default is ``base``.
 
-    :param dict kwargs: Any additional argument that may be passed from the
-        state module. If they don't apply, they are ignored.
+    *Keyword Arguments (kwargs)*
+
+    :param str version:
+        The specific version to install. If omitted, the latest version will be
+        installed. If passed with multiple install, the version will apply to
+        all packages. Recommended for single installation only.
+
+    :param str cache_file:
+        A single file to copy down for use with the installer. Copied to the
+        same location as the installer. Use this over ``cache_dir`` if there
+        are many files in the directory and you only need a specific file and
+        don't want to cache additional files that may reside in the installer
+        directory. Only applies to files on ``salt://``
+
+    :param bool cache_dir:
+        True will copy the contents of the installer directory. This is useful
+        for installations that are not a single file. Only applies to
+        directories on ``salt://``
 
     :return: Return a dict containing the new package names and versions::
     :rtype: dict
@@ -524,6 +607,40 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
         salt '*' pkg.install 7zip
         salt '*' pkg.install 7zip,filezilla
         salt '*' pkg.install pkgs='["7zip","filezilla"]'
+
+    WinRepo Definition File Examples:
+
+    The following example demonstrates the use of ``cache_file``. This would be
+    used if you have multiple installers in the same directory that use the same
+    ``install.ini`` file and you don't want to download the additional
+    installers.
+
+    .. code-block:: bash
+
+        ntp:
+          4.2.8:
+            installer: 'salt://win/repo/ntp/ntp-4.2.8-win32-setup.exe'
+            full_name: Meinberg NTP Windows Client
+            locale: en_US
+            reboot: False
+            cache_file: 'salt://win/repo/ntp/install.ini'
+            install_flags: '/USEFILE=C:\salt\var\cache\salt\minion\files\base\win\repo\ntp\install.ini'
+            uninstaller: 'NTP/uninst.exe'
+
+    The following example demonstrates the use of ``cache_dir``. It assumes a
+    file named ``install.ini`` resides in the same directory as the installer.
+
+    .. code-block:: bash
+
+        ntp:
+          4.2.8:
+            installer: 'salt://win/repo/ntp/ntp-4.2.8-win32-setup.exe'
+            full_name: Meinberg NTP Windows Client
+            locale: en_US
+            reboot: False
+            cache_dir: True
+            install_flags: '/USEFILE=C:\salt\var\cache\salt\minion\files\base\win\repo\ntp\install.ini'
+            uninstaller: 'NTP/uninst.exe'
     '''
     ret = {}
     if refresh:
@@ -589,15 +706,10 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
         if 'latest' in pkginfo:
             latest.append(pkg_name)
 
-<<<<<<< HEAD
-        # Get the installer
-        installer = pkginfo[version_num].get('installer')
-=======
         # Get the installer settings from winrepo.p
         installer = pkginfo[version_num].get('installer', False)
         cache_dir = pkginfo[version_num].get('cache_dir', False)
         cache_file = pkginfo[version_num].get('cache_file', False)
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
         # Is there an installer configured?
         if not installer:
@@ -613,10 +725,28 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
             # If true, the entire directory will be cached instead of the
             # individual file. This is useful for installations that are not
             # single files
-            cache_dir = pkginfo[version_num].get('cache_dir')
             if cache_dir and installer.startswith('salt:'):
                 path, _ = os.path.split(installer)
                 __salt__['cp.cache_dir'](path, saltenv, False, None, 'E@init.sls$')
+
+            # Check to see if the cache_file is cached... if passed
+            if cache_file and cache_file.startswith('salt:'):
+
+                # Check to see if the file is cached
+                cached_file = __salt__['cp.is_cached'](cache_file, saltenv)
+                if not cached_file:
+                    cached_file = __salt__['cp.cache_file'](cache_file, saltenv)
+
+                # Make sure the cached file is the same as the source
+                if __salt__['cp.hash_file'](cache_file, saltenv) != \
+                        __salt__['cp.hash_file'](cached_file):
+                    cached_file = __salt__['cp.cache_file'](cache_file, saltenv)
+
+                    # Check if the cache_file was cached successfully
+                    if not cached_file:
+                        log.error('Unable to cache {0}'.format(cache_file))
+                        ret[pkg_name] = {'failed to cache cache_file': cache_file}
+                        continue
 
             # Check to see if the installer is cached
             cached_pkg = __salt__['cp.is_cached'](installer, saltenv)
@@ -653,6 +783,20 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
         cached_pkg = cached_pkg.replace('/', '\\')
         cache_path, _ = os.path.split(cached_pkg)
 
+        # Compare the hash sums
+        source_hash = pkginfo[version_num].get('source_hash', False)
+        if source_hash:
+            source_sum = _get_source_sum(source_hash, cached_pkg, saltenv)
+            log.debug('Source %s hash: %s', source_sum['hash_type'], source_sum['hsum'])
+
+            cached_pkg_sum = salt.utils.get_hash(cached_pkg, source_sum['hash_type'])
+            log.debug('Package %s hash: %s', source_sum['hash_type'], cached_pkg_sum)
+
+            if source_sum['hsum'] != cached_pkg_sum:
+                raise SaltInvocationError(("Source hash '{0}' does not match package hash"
+                                           " '{1}'").format(source_sum['hsum'], cached_pkg_sum))
+            log.debug('Source hash matches package hash.')
+
         # Get install flags
         install_flags = '{0}'.format(pkginfo[version_num].get('install_flags'))
         if options and options.get('extra_install_flags'):
@@ -669,10 +813,10 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
                 arguments = ['/i', cached_pkg]
                 if pkginfo['version_num'].get('allusers', True):
                     arguments.append('ALLUSERS="1"')
-                arguments.extend(shlex.split(install_flags))
+                arguments.extend(salt.utils.shlex_split(install_flags))
             else:
                 cmd = cached_pkg
-                arguments = shlex.split(install_flags)
+                arguments = salt.utils.shlex_split(install_flags)
 
             # Create Scheduled Task
             __salt__['task.create_task'](name='update-salt-software',
@@ -696,7 +840,7 @@ def install(name=None, refresh=False, pkgs=None, saltenv='base', **kwargs):
                     cmd.append('ALLUSERS="1"')
             else:
                 cmd.append(cached_pkg)
-            cmd.extend(shlex.split(install_flags))
+            cmd.extend(salt.utils.shlex_split(install_flags))
             # Launch the command
             result = __salt__['cmd.run_stdout'](cmd,
                                                 cache_path,
@@ -898,10 +1042,10 @@ def remove(name=None, pkgs=None, version=None, **kwargs):
             if pkginfo[version_num].get('msiexec'):
                 cmd = 'msiexec.exe'
                 arguments = ['/x']
-                arguments.extend(shlex.split(uninstall_flags))
+                arguments.extend(salt.utils.shlex_split(uninstall_flags))
             else:
                 cmd = expanded_cached_pkg
-                arguments = shlex.split(uninstall_flags)
+                arguments = salt.utils.shlex_split(uninstall_flags)
 
             # Create Scheduled Task
             __salt__['task.create_task'](name='update-salt-software',
@@ -923,7 +1067,7 @@ def remove(name=None, pkgs=None, version=None, **kwargs):
                 cmd.extend(['msiexec', '/x', expanded_cached_pkg])
             else:
                 cmd.append(expanded_cached_pkg)
-            cmd.extend(shlex.split(uninstall_flags))
+            cmd.extend(salt.utils.shlex_split(uninstall_flags))
             # Launch the command
             result = __salt__['cmd.run_stdout'](cmd,
                                                 output_loglevel='trace',
