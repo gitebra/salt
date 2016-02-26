@@ -1371,23 +1371,6 @@ def idrac_general(blade_name, command, idrac_password=None,
         return ret
 
 
-<<<<<<< HEAD
-def bare_rac_cmd(cmd, host=None,
-                admin_username=None, admin_password=None):
-
-    ret = __execute_ret('{0}'.format(cmd),
-                        host=host,
-                        admin_username=admin_username,
-                        admin_password=admin_password)
-
-    if ret['retcode'] == 0:
-        return ret['stdout']
-    else:
-        return ret
-
-
-=======
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 def _update_firmware(cmd,
                      host=None,
                      admin_username=None,

@@ -81,12 +81,6 @@ def __virtual__():
     if not HAS_BOTO:
         return False
     elif _LooseVersion(boto.__version__) < _LooseVersion(required_boto_version):
-<<<<<<< HEAD
-        return False
-    else:
-        __utils__['boto.assign_funcs'](__name__, 'ec2', pack=__salt__)
-        return True
-=======
         return (False, "The boto_ec2 module cannot be loaded: boto library version incorrect ")
     else:
         __utils__['boto.assign_funcs'](__name__, 'ec2', pack=__salt__)
@@ -419,7 +413,6 @@ def disassociate_eip_address(public_ip=None, association_id=None, region=None,
     except boto.exception.BotoServerError as e:
         log.error(e)
         return False
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
 
 def get_zones(region=None, key=None, keyid=None, profile=None):
@@ -837,8 +830,6 @@ def set_attribute(attribute, attribute_value, instance_name=None, instance_id=No
     except boto.exception.BotoServerError as exc:
         log.error(exc)
         return False
-<<<<<<< HEAD
-=======
 
 
 def get_network_interface_id(name, region=None, key=None, keyid=None,
@@ -1212,4 +1203,3 @@ def modify_network_interface_attribute(
     except boto.exception.EC2ResponseError as e:
         r['error'] = __utils__['boto.get_error'](e)
     return r
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b

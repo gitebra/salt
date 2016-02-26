@@ -103,13 +103,10 @@ def update(clear=False):
         salt '*' mine.update
     '''
     m_data = __salt__['config.merge']('mine_functions', {})
-<<<<<<< HEAD
-=======
     # If we don't have any mine functions configured, then we should just bail out
     if not m_data:
         return
 
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
     data = {}
     for func in m_data:
         try:

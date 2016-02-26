@@ -166,12 +166,6 @@ def _git_run(command, cwd=None, runas=None, identity=None,
 
         # try each of the identities, independently
         for id_file in identity:
-<<<<<<< HEAD
-            if not os.path.isfile(id_file):
-                missing_keys.append(id_file)
-                log.warning('Identity file {0} does not exist'.format(id_file))
-                continue
-=======
             if 'salt://' in id_file:
                 _id_file = id_file
                 id_file = __salt__['cp.cache_file'](id_file)
@@ -183,7 +177,6 @@ def _git_run(command, cwd=None, runas=None, identity=None,
                     missing_keys.append(id_file)
                     log.error('identity {0} does not exist.'.format(id_file))
                     continue
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
             env = {
                 'GIT_IDENTITY': id_file
@@ -737,13 +730,10 @@ def clone(cwd,
             Salt will no longer attempt to use passphrase-protected keys unless
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
-<<<<<<< HEAD
-=======
 
         Key can also be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionchanged:: 2016.3.0
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     https_user
         Set HTTP Basic Auth username. Only accepted for HTTPS URLs.
@@ -1443,13 +1433,10 @@ def fetch(cwd,
             Salt will no longer attempt to use passphrase-protected keys unless
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
-<<<<<<< HEAD
-=======
 
         Key can also be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionchanged:: 2016.3.0
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     ignore_retcode : False
         If ``True``, do not log an error to the minion log if the git command
@@ -2085,13 +2072,10 @@ def ls_remote(cwd=None,
             Salt will no longer attempt to use passphrase-protected keys unless
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
-<<<<<<< HEAD
-=======
 
         Key can also be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionchanged:: 2016.3.0
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     https_user
         Set HTTP Basic Auth username. Only accepted for HTTPS URLs.
@@ -2517,13 +2501,10 @@ def pull(cwd, opts='', user=None, identity=None, ignore_retcode=False):
             Salt will no longer attempt to use passphrase-protected keys unless
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
-<<<<<<< HEAD
-=======
 
         Key can also be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionchanged:: 2016.3.0
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     ignore_retcode : False
         If ``True``, do not log an error to the minion log if the git command
@@ -2611,13 +2592,10 @@ def push(cwd,
             Salt will no longer attempt to use passphrase-protected keys unless
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
-<<<<<<< HEAD
-=======
 
         Key can also be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionchanged:: 2016.3.0
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     ignore_retcode : False
         If ``True``, do not log an error to the minion log if the git command
@@ -2821,13 +2799,10 @@ def remote_refs(url,
             Salt will no longer attempt to use passphrase-protected keys unless
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
-<<<<<<< HEAD
-=======
 
         Key can also be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionchanged:: 2016.3.0
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     https_user
         Set HTTP Basic Auth username. Only accepted for HTTPS URLs.
@@ -3407,13 +3382,10 @@ def submodule(cwd,
             Salt will no longer attempt to use passphrase-protected keys unless
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
-<<<<<<< HEAD
-=======
 
         Key can also be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionchanged:: 2016.3.0
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 
     ignore_retcode : False
         If ``True``, do not log an error to the minion log if the git command

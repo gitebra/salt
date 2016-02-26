@@ -365,13 +365,10 @@ def latest(name,
             invoked from the minion using ``salt-call``, to prevent blocking
             waiting for user input.
 
-<<<<<<< HEAD
-=======
         Key can be specified as a SaltStack file server URL, eg. salt://location/identity_file
 
         .. versionadded:: 2016.3.0
 
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
     https_user
         HTTP Basic Auth username for HTTPS (only) clones
 
@@ -417,8 +414,6 @@ def latest(name,
               - pkg: git
               - ssh_known_hosts: gitlab.example.com
 
-<<<<<<< HEAD
-=======
         git-website-staging:
           git.latest:
             - name: ssh://git@gitlab.example.com:user/website.git
@@ -431,7 +426,6 @@ def latest(name,
 
             .. versionadded:: 2016.3.0
 
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
         git-website-prod:
           git.latest:
             - name: git@gitlab.example.com:user/website.git
@@ -1733,8 +1727,6 @@ def present(name,
     return ret
 
 
-<<<<<<< HEAD
-=======
 def detached(name,
            ref,
            target=None,
@@ -2205,7 +2197,6 @@ def detached(name,
     return ret
 
 
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
 def config_unset(name,
                  value_regex=None,
                  repo=None,

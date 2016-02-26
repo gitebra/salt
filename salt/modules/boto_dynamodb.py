@@ -74,11 +74,7 @@ def __virtual__():
     Only load if boto libraries exist.
     '''
     if not HAS_BOTO:
-<<<<<<< HEAD
-        return False
-=======
         return (False, 'The module boto_dynamodb could not be loaded: boto libraries not found')
->>>>>>> 15f5ae7454411c9a31799d256093b8ebe0f0b52b
     __utils__['boto.assign_funcs'](__name__, 'dynamodb2', pack=__salt__)
     return True
 
