@@ -70,8 +70,9 @@ VALID_OPTS = {
     'master_port': int,
 
     # The behaviour of the minion when connecting to a master. Can specify 'failover',
-    # or 'func'. If 'func' is specified, the 'master' option should be set to an exec
-    # module function to run to determine the master hostname.
+    # 'disable' or 'func'. If 'func' is specified, the 'master' option should be set to an
+    # exec module function to run to determine the master hostname. If 'disable' is specified
+    # the minion will run, but will not try to connect to a master.
     'master_type': str,
 
     # Specify the format in which the master address will be specified. Can
@@ -608,6 +609,9 @@ VALID_OPTS = {
     # The queue size for workers in the reactor
     'reactor_worker_hwm': int,
 
+    # Defines engines. See https://docs.saltstack.com/en/latest/topics/engines/
+    'engines': dict,
+
     'serial': str,
     'search': str,
 
@@ -686,6 +690,13 @@ VALID_OPTS = {
 
     # The number of attempts to authenticate to a master before giving up
     'auth_tries': int,
+
+    # The number of attempts to connect to a master before giving up.
+    # Set this to -1 for unlimited attempts. This allows for a master to have
+    # downtime and the minion to reconnect to it later when it comes back up.
+    # In 'failover' mode, it is the number of attempts for each set of masters.
+    # In this mode, it will cycle through the list of masters for each attempt.
+    'master_tries': int,
 
     # Never give up when trying to authenticate to a master
     'auth_safemode': bool,
@@ -956,6 +967,10 @@ DEFAULT_MINION_OPTS = {
     'winrepo_passphrase': '',
     'pidfile': os.path.join(salt.syspaths.PIDFILE_DIR, 'salt-minion.pid'),
     'range_server': 'range:80',
+    'reactor_refresh_interval': 60,
+    'reactor_worker_threads': 10,
+    'reactor_worker_hwm': 10000,
+    'engines': {},
     'tcp_keepalive': True,
     'tcp_keepalive_idle': 300,
     'tcp_keepalive_cnt': -1,
@@ -967,6 +982,7 @@ DEFAULT_MINION_OPTS = {
     'transport': 'zeromq',
     'auth_timeout': 60,
     'auth_tries': 7,
+    'master_tries': 1,
     'auth_safemode': False,
     'random_master': False,
     'minion_floscript': os.path.join(FLO_DIR, 'minion.flo'),
@@ -1159,6 +1175,7 @@ DEFAULT_MASTER_OPTS = {
     'reactor_refresh_interval': 60,
     'reactor_worker_threads': 10,
     'reactor_worker_hwm': 10000,
+    'engines': {},
     'event_return': '',
     'event_return_queue': 0,
     'event_return_whitelist': [],
