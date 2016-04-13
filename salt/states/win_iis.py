@@ -30,7 +30,7 @@ def deployed(name, sourcepath, apppool='', hostheader='', ipaddress='*', port=80
     '''
     Ensure the website has been deployed.
 
-    ..note:
+    .. note:
 
         This function only validates against the site name, and will return True even
         if the site already exists with a different configuration. It will not modify
@@ -44,7 +44,7 @@ def deployed(name, sourcepath, apppool='', hostheader='', ipaddress='*', port=80
     :param str port: The TCP port of the binding.
     :param str protocol: The application protocol of the binding.
 
-    ..note:
+    .. note:
 
         If an application pool is specified, and that application pool does not already exist,
         it will be created.
@@ -102,11 +102,85 @@ def remove_site(name):
     return ret
 
 
+def create_binding(name, site, hostheader='', ipaddress='*', port=80, protocol='http', sslflags=0):
+    '''
+    Create an IIS binding.
+
+    .. note:
+
+        This function only validates against the binding ipaddress:port:hostheader combination,
+        and will return True even if the binding already exists with a different configuration.
+        It will not modify the configuration of an existing binding.
+
+    :param str site: The IIS site name.
+    :param str hostheader: The host header of the binding.
+    :param str ipaddress: The IP address of the binding.
+    :param str port: The TCP port of the binding.
+    :param str protocol: The application protocol of the binding.
+    :param str sslflags: The flags representing certificate type and storage of the binding.
+    '''
+    ret = {'name': name,
+           'changes': {},
+           'comment': str(),
+           'result': None}
+
+    binding = "{0}:{1}:{2}".format(ipaddress, port, hostheader)
+    current_bindings = __salt__['win_iis.list_bindings'](site)
+
+    if binding in current_bindings:
+        ret['comment'] = 'Binding already present: {0}'.format(binding)
+        ret['result'] = True
+    elif __opts__['test']:
+        ret['comment'] = 'Binding will be created: {0}'.format(binding)
+        ret['changes'] = {'old': None,
+                          'new': binding}
+    else:
+        ret['comment'] = 'Created binding: {0}'.format(binding)
+        ret['changes'] = {'old': None,
+                          'new': binding}
+        ret['result'] = __salt__['win_iis.create_binding'](site, hostheader, ipaddress,
+                                                           port, protocol, sslflags)
+    return ret
+
+
+def remove_binding(name, site, hostheader='', ipaddress='*', port=80):
+    '''
+    Remove an IIS binding.
+
+    :param str site: The IIS site name.
+    :param str hostheader: The host header of the binding.
+    :param str ipaddress: The IP address of the binding.
+    :param str port: The TCP port of the binding.
+    '''
+    ret = {'name': name,
+           'changes': {},
+           'comment': str(),
+           'result': None}
+
+    binding = "{0}:{1}:{2}".format(ipaddress, port, hostheader)
+    current_bindings = __salt__['win_iis.list_bindings'](site)
+
+    if binding not in current_bindings:
+        ret['comment'] = 'Binding has already been removed: {0}'.format(binding)
+        ret['result'] = True
+    elif __opts__['test']:
+        ret['comment'] = 'Binding will be removed: {0}'.format(binding)
+        ret['changes'] = {'old': binding,
+                          'new': None}
+    else:
+        ret['comment'] = 'Removed binding: {0}'.format(binding)
+        ret['changes'] = {'old': binding,
+                          'new': None}
+        ret['result'] = __salt__['win_iis.remove_binding'](site, hostheader,
+                                                           ipaddress, port)
+    return ret
+
+
 def create_apppool(name):
     '''
     Create an IIS application pool.
 
-    ..note:
+    .. note:
 
         This function only validates against the application pool name, and will return
         True even if the application pool already exists with a different configuration.
@@ -167,9 +241,82 @@ def remove_apppool(name):
     return ret
 
 
+def create_app(name, site, sourcepath, apppool=None):
+    '''
+    Create an IIS application.
+
+    .. note:
+
+        This function only validates against the application name, and will return True
+        even if the application already exists with a different configuration. It will not
+        modify the configuration of an existing application.
+
+    :param str name: The IIS application.
+    :param str site: The IIS site name.
+    :param str sourcepath: The physical path.
+    :param str apppool: The name of the IIS application pool.
+    '''
+    ret = {'name': name,
+           'changes': {},
+           'comment': str(),
+           'result': None}
+
+    current_apps = __salt__['win_iis.list_apps'](site)
+
+    if name in current_apps:
+        ret['comment'] = 'Application already present: {0}'.format(name)
+        ret['result'] = True
+    elif __opts__['test']:
+        ret['comment'] = 'Application will be created: {0}'.format(name)
+        ret['changes'] = {'old': None,
+                          'new': name}
+    else:
+        ret['comment'] = 'Created application: {0}'.format(name)
+        ret['changes'] = {'old': None,
+                          'new': name}
+        ret['result'] = __salt__['win_iis.create_app'](name, site, sourcepath,
+                                                       apppool)
+    return ret
+
+
+def remove_app(name, site):
+    '''
+    Remove an IIS application.
+
+    :param str name: The application name.
+    :param str site: The IIS site name.
+    '''
+    ret = {'name': name,
+           'changes': {},
+           'comment': str(),
+           'result': None}
+
+    current_apps = __salt__['win_iis.list_apps'](site)
+
+    if name not in current_apps:
+        ret['comment'] = 'Application has already been removed: {0}'.format(name)
+        ret['result'] = True
+    elif __opts__['test']:
+        ret['comment'] = 'Application will be removed: {0}'.format(name)
+        ret['changes'] = {'old': name,
+                          'new': None}
+    else:
+        ret['comment'] = 'Removed application: {0}'.format(name)
+        ret['changes'] = {'old': name,
+                          'new': None}
+        ret['result'] = __salt__['win_iis.remove_app'](name, site)
+    return ret
+
+
 def create_vdir(name, site, sourcepath, app='/'):
     '''
     Create an IIS virtual directory.
+
+    .. note:
+
+        This function only validates against the virtual directory name, and will return
+        True even if the virtual directory already exists with a different configuration.
+        It will not modify the configuration of an existing virtual directory.
 
     :param str name: The virtual directory name.
     :param str site: The IIS site name.
