@@ -265,10 +265,17 @@
 #
 #
 # The loop_interval sets how long in seconds the minion will wait between
-# evaluating the scheduler and running cleanup tasks. This defaults to a
-# sane 60 seconds, but if the minion scheduler needs to be evaluated more
-# often lower this value
-#loop_interval: 60
+# evaluating the scheduler and running cleanup tasks.  This defaults to 1
+# second on the minion scheduler.
+#loop_interval: 1
+
+# Some installations choose to start all job returns in a cache or a returner
+# and forgo sending the results back to a master. In this workflow, jobs
+# are most often executed with --async from the Salt CLI and then results
+# are evaluated by examining job caches on the minions or any configured returners.
+# WARNING: Setting this to False will **disable** returns back to the master.
+#pub_ret: True
+
 
 # The grains can be merged, instead of overridden, using this option.
 # This allows custom grains to defined different subvalues of a dictionary

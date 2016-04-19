@@ -1557,6 +1557,9 @@ class Minion(MinionBase):
                 os.makedirs(jdir)
             salt.utils.fopen(fn_, 'w+b').write(self.serial.dumps(ret))
 
+        if not self.opts['pub_ret']:
+            return ''
+
         def timeout_handler(*_):
             msg = ('The minion failed to return the job information for job '
                    '{0}. This is often due to the master being shut down or '
@@ -1999,7 +2002,7 @@ class Minion(MinionBase):
         self.periodic_callbacks = {}
         # schedule the stuff that runs every interval
         ping_interval = self.opts.get('ping_interval', 0) * 60
-        if ping_interval > 0:
+        if ping_interval > 0 and self.connected:
             def ping_master():
                 try:
                     if not self._fire_master('ping', 'minion_ping'):
@@ -2022,7 +2025,7 @@ class Minion(MinionBase):
                 beacons = self.process_beacons(self.functions)
             except Exception:
                 log.critical('The beacon errored: ', exc_info=True)
-            if beacons:
+            if beacons and self.connected:
                 self._fire_master(events=beacons)
 
         self.periodic_callbacks['beacons'] = tornado.ioloop.PeriodicCallback(handle_beacons, loop_interval * 1000, io_loop=self.io_loop)
