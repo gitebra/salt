@@ -49,9 +49,13 @@ Connection module for Amazon EC2
 from __future__ import absolute_import
 import logging
 import time
+import json
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from distutils.version import LooseVersion as _LooseVersion  # pylint: disable=import-error,no-name-in-module
 
 # Import Salt libs
+import salt.utils
+import salt.utils.compat
 import salt.ext.six as six
 from salt.exceptions import SaltInvocationError, CommandExecutionError
 
@@ -79,7 +83,7 @@ def __virtual__():
     # which was added in boto 2.8.0
     # https://github.com/boto/boto/commit/33ac26b416fbb48a60602542b4ce15dcc7029f12
     if not HAS_BOTO:
-        return False
+        return (False, "The boto_ec2 module cannot be loaded: boto library not found")
     elif _LooseVersion(boto.__version__) < _LooseVersion(required_boto_version):
         return (False, "The boto_ec2 module cannot be loaded: boto library version incorrect ")
     else:
@@ -434,7 +438,8 @@ def get_zones(region=None, key=None, keyid=None, profile=None):
 
 
 def find_instances(instance_id=None, name=None, tags=None, region=None,
-                   key=None, keyid=None, profile=None, return_objs=False):
+                   key=None, keyid=None, profile=None, return_objs=False,
+                   in_states=None):
 
     '''
     Given instance properties, find and return matching instance ids
@@ -468,10 +473,98 @@ def find_instances(instance_id=None, name=None, tags=None, region=None,
         log.debug('The filters criteria {0} matched the following '
                   'instances:{1}'.format(filter_parameters, instances))
 
+        if in_states:
+            instances = [i for i in instances if i.state in in_states]
+            log.debug('Limiting instance matches to those in the requested '
+                      'states: {0}'.format(instances))
         if instances:
             if return_objs:
                 return instances
             return [instance.id for instance in instances]
+        else:
+            return []
+    except boto.exception.BotoServerError as exc:
+        log.error(exc)
+        return []
+
+
+def create_image(ami_name, instance_id=None, instance_name=None, tags=None, region=None,
+                 key=None, keyid=None, profile=None, description=None, no_reboot=False,
+                 dry_run=False):
+    '''
+    Given instance properties that define exactly one instance, create AMI and return AMI-id.
+
+    CLI Examples:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.create_instance ami_name instance_name=myinstance
+        salt myminion boto_ec2.create_instance another_ami_name tags='{"mytag": "value"}' description='this is my ami'
+
+    '''
+
+    instances = find_instances(instance_id=instance_id, name=instance_name, tags=tags,
+                               region=region, key=key, keyid=keyid, profile=profile,
+                               return_objs=True)
+
+    if not instances:
+        log.error('Source instance not found')
+        return False
+    if len(instances) > 1:
+        log.error('Multiple instances found, must match exactly only one instance to create an image from')
+        return False
+
+    instance = instances[0]
+    try:
+        return instance.create_image(ami_name, description=description,
+                                     no_reboot=no_reboot, dry_run=dry_run)
+    except boto.exception.BotoServerError as exc:
+        log.error(exc)
+        return False
+
+
+def find_images(ami_name=None, executable_by=None, owners=None, image_ids=None, tags=None,
+                region=None, key=None, keyid=None, profile=None, return_objs=False):
+
+    '''
+    Given image properties, find and return matching AMI ids
+
+    CLI Examples:
+
+    .. code-block:: bash
+
+        salt myminion boto_ec2.find_instances tags='{"mytag": "value"}'
+
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    try:
+        filter_parameters = {'filters': {}}
+
+        if image_ids:
+            filter_parameters['image_ids'] = [image_ids]
+
+        if executable_by:
+            filter_parameters['executable_by'] = [executable_by]
+
+        if owners:
+            filter_parameters['owners'] = [owners]
+
+        if ami_name:
+            filter_parameters['filters']['name'] = ami_name
+
+        if tags:
+            for tag_name, tag_value in six.iteritems(tags):
+                filter_parameters['filters']['tag:{0}'.format(tag_name)] = tag_value
+
+        images = conn.get_all_images(**filter_parameters)
+        log.debug('The filters criteria {0} matched the following '
+                  'images:{1}'.format(filter_parameters, images))
+
+        if images:
+            if return_objs:
+                return images
+            return [image.id for image in images]
         else:
             return False
     except boto.exception.BotoServerError as exc:
@@ -494,22 +587,22 @@ def terminate(instance_id=None, name=None, region=None,
     instances = find_instances(instance_id=instance_id, name=name,
                                region=region, key=key, keyid=keyid,
                                profile=profile, return_objs=True)
-    if instances in (False, None):
+    if instances in (False, None, []):
         return instances
 
     if len(instances) == 1:
         instances[0].terminate()
         return True
     else:
-        log.warning('refusing to terminate multiple instances at once')
+        log.warning('Refusing to terminate multiple instances at once')
         return False
 
 
 def get_id(name=None, tags=None, region=None, key=None,
-           keyid=None, profile=None):
+           keyid=None, profile=None, in_states=None):
 
     '''
-    Given instace properties, return the instance id if it exist.
+    Given instance properties, return the instance id if it exists.
 
     CLI Example:
 
@@ -519,7 +612,7 @@ def get_id(name=None, tags=None, region=None, key=None,
 
     '''
     instance_ids = find_instances(name=name, tags=tags, region=region, key=key,
-                                  keyid=keyid, profile=profile)
+                                  keyid=keyid, profile=profile, in_states=in_states)
     if instance_ids:
         log.info("Instance ids: {0}".format(" ".join(instance_ids)))
         if len(instance_ids) == 1:
@@ -533,7 +626,7 @@ def get_id(name=None, tags=None, region=None, key=None,
 
 
 def exists(instance_id=None, name=None, tags=None, region=None, key=None,
-           keyid=None, profile=None):
+           keyid=None, profile=None, in_states=None):
     '''
     Given a instance id, check to see if the given instance id exists.
 
@@ -548,18 +641,80 @@ def exists(instance_id=None, name=None, tags=None, region=None, key=None,
     '''
     instances = find_instances(instance_id=instance_id, name=name, tags=tags,
                                region=region, key=key, keyid=keyid,
-                               profile=profile)
+                               profile=profile, in_states=in_states)
     if instances:
-        log.info('instance exists.')
+        log.info('Instance exists.')
         return True
     else:
-        log.warning('instance does not exist.')
+        log.warning('Instance does not exist.')
         return False
 
 
-def run(image_id, name=None, tags=None, instance_type='m1.small',
-        key_name=None, security_groups=None, user_data=None, placement=None,
-        region=None, key=None, keyid=None, profile=None):
+def _to_blockdev_map(thing):
+    '''
+    Convert a string, or a json payload, or a dict in the right
+    format, into a boto.ec2.blockdevicemapping.BlockDeviceMapping as
+    needed by instance_present().  The following YAML is a direct
+    representation of what is expected by the underlying boto EC2 code.
+
+    YAML example:
+
+    .. code-block:: yaml
+        device-maps:
+            /dev/sdb:
+                ephemeral_name: ephemeral0
+            /dev/sdc:
+                ephemeral_name: ephemeral1
+            /dev/sdd:
+                ephemeral_name: ephemeral2
+            /dev/sde:
+                ephemeral_name: ephemeral3
+            /dev/sdf:
+                size: 20
+                volume_type: gp2
+
+    '''
+    if not thing:
+        return None
+    if isinstance(thing, BlockDeviceMapping):
+        return thing
+    if isinstance(thing, six.string_types):
+        thing = json.loads(thing)
+    if not isinstance(thing, dict):
+        log.error("Can't convert '{0}' of type {1} to a "
+                  "boto.ec2.blockdevicemapping.BlockDeviceMapping".format(thing, type(thing)))
+        return None
+
+    bdm = BlockDeviceMapping()
+    for d, t in thing.iteritems():
+        bdt = BlockDeviceType(ephemeral_name=t.get('ephemeral_name'),
+                              no_device=t.get('no_device', False),
+                              volume_id=t.get('volume_id'),
+                              snapshot_id=t.get('snapshot_id'),
+                              status=t.get('status'),
+                              attach_time=t.get('attach_time'),
+                              delete_on_termination=t.get('delete_on_termination', False),
+                              size=t.get('size'),
+                              volume_type=t.get('volume_type'),
+                              iops=t.get('iops'),
+                              encrypted=t.get('encrypted'))
+        bdm[d] = bdt
+
+    return bdm
+
+
+def run(image_id, name=None, tags=None, key_name=None, security_groups=None,
+        user_data=None, instance_type='m1.small', placement=None,
+        kernel_id=None, ramdisk_id=None, monitoring_enabled=None, vpc_id=None,
+        vpc_name=None, subnet_id=None, subnet_name=None, private_ip_address=None,
+        block_device_map=None, disable_api_termination=None,
+        instance_initiated_shutdown_behavior=None, placement_group=None,
+        client_token=None, security_group_ids=None, security_group_names=None,
+        additional_info=None, tenancy=None, instance_profile_arn=None,
+        instance_profile_name=None, ebs_optimized=None,
+        network_interface_id=None, network_interface_name=None,
+        region=None, key=None, keyid=None, profile=None, network_interfaces=None):
+    #TODO: support multi-instance reservations
     '''
     Create and start an EC2 instance.
 
@@ -571,18 +726,179 @@ def run(image_id, name=None, tags=None, instance_type='m1.small',
 
         salt myminion boto_ec2.run ami-b80c2b87 name=myinstance
 
+    image_id
+        (string) – The ID of the image to run.
+    name
+        (string) - The name of the instance.
+    tags
+        (dict of key: value pairs) - tags to apply to the instance.
+    key_name
+        (string) – The name of the key pair with which to launch instances.
+    security_groups
+        (list of strings) – The names of the EC2 classic security groups with
+        which to associate instances
+    user_data
+        (string) – The Base64-encoded MIME user data to be made available to the
+        instance(s) in this reservation.
+    instance_type
+        (string) – The type of instance to run.  Note that some image types
+        (e.g. hvm) only run on some instance types.
+    placement
+        (string) – The Availability Zone to launch the instance into.
+    kernel_id
+        (string) – The ID of the kernel with which to launch the instances.
+    ramdisk_id
+        (string) – The ID of the RAM disk with which to launch the instances.
+    monitoring_enabled
+        (bool) – Enable detailed CloudWatch monitoring on the instance.
+    vpc_id
+        (string) - ID of a VPC to bind the instance to.  Exclusive with vpc_name.
+    vpc_name
+        (string) - Name of a VPC to bind the instance to.  Exclusive with vpc_id.
+    subnet_id
+        (string) – The subnet ID within which to launch the instances for VPC.
+    subnet_name
+        (string) – The name of a subnet within which to launch the instances for VPC.
+    private_ip_address
+        (string) – If you’re using VPC, you can optionally use this parameter to
+        assign the instance a specific available IP address from the subnet
+        (e.g. 10.0.0.25).
+    block_device_map
+        (boto.ec2.blockdevicemapping.BlockDeviceMapping) – A BlockDeviceMapping
+        data structure describing the EBS volumes associated with the Image.
+        (string) - A string representation of a BlockDeviceMapping structure
+        (dict) - A dict describing a BlockDeviceMapping structure
+        YAML example:
+        .. code-block:: yaml
+            device-maps:
+                /dev/sdb:
+                    ephemeral_name: ephemeral0
+                /dev/sdc:
+                    ephemeral_name: ephemeral1
+                /dev/sdd:
+                    ephemeral_name: ephemeral2
+                /dev/sde:
+                    ephemeral_name: ephemeral3
+                /dev/sdf:
+                    size: 20
+                    volume_type: gp2
+    disable_api_termination
+        (bool) – If True, the instances will be locked and will not be able to
+        be terminated via the API.
+    instance_initiated_shutdown_behavior
+        (string) – Specifies whether the instance stops or terminates on
+        instance-initiated shutdown. Valid values are: stop, terminate
+    placement_group
+        (string) – If specified, this is the name of the placement group in
+        which the instance(s) will be launched.
+    client_token
+        (string) – Unique, case-sensitive identifier you provide to ensure
+        idempotency of the request. Maximum 64 ASCII characters.
+    security_group_ids
+        (list of strings) – The ID(s) of the VPC security groups with which to
+        associate instances.
+    security_group_names
+        (list of strings) – The name(s) of the VPC security groups with which to
+        associate instances.
+    additional_info
+        (string) – Specifies additional information to make available to the
+        instance(s).
+    tenancy
+        (string) – The tenancy of the instance you want to launch. An instance
+        with a tenancy of ‘dedicated’ runs on single-tenant hardware and can
+        only be launched into a VPC. Valid values are:”default” or “dedicated”.
+        NOTE: To use dedicated tenancy you MUST specify a VPC subnet-ID as well.
+    instance_profile_arn
+        (string) – The Amazon resource name (ARN) of the IAM Instance Profile
+        (IIP) to associate with the instances.
+    instance_profile_name
+        (string) – The name of the IAM Instance Profile (IIP) to associate with
+        the instances.
+    ebs_optimized
+        (bool) – Whether the instance is optimized for EBS I/O. This
+        optimization provides dedicated throughput to Amazon EBS and an
+        optimized configuration stack to provide optimal EBS I/O performance.
+        This optimization isn’t available with all instance types.
+    network_interfaces
+        (boto.ec2.networkinterface.NetworkInterfaceCollection) – A
+        NetworkInterfaceCollection data structure containing the ENI
+        specifications for the instance.
+    network_interface_id
+        (string) - ID of the network interface to attach to the instance
+    network_interface_name
+        (string) - Name of the network interface to attach to the instance
+
     '''
-    #TODO: support multi-instance reservations
+    if all((subnet_id, subnet_name)):
+        raise SaltInvocationError('Only one of subnet_name or subnet_id may be '
+                                  'provided.')
+    if subnet_name:
+        r = __salt__['boto_vpc.get_resource_id']('subnet', subnet_name,
+                                                 region=region, key=key,
+                                                 keyid=keyid, profile=profile)
+        if 'id' not in r:
+            log.warning('Couldn\'t resolve subnet name {0}.').format(subnet_name)
+            return False
+        subnet_id = r['id']
+
+    if all((security_group_ids, security_group_names)):
+        raise SaltInvocationError('Only one of security_group_ids or '
+                                  'security_group_names may be provided.')
+    if security_group_names:
+        security_group_ids = []
+        for sgn in security_group_names:
+            r = __salt__['boto_secgroup.get_group_id'](sgn, vpc_name=vpc_name,
+                                                       region=region, key=key,
+                                                       keyid=keyid, profile=profile)
+            if not r:
+                log.warning('Couldn\'t resolve security group name ' + str(sgn))
+                return False
+            security_group_ids += [r]
+
+    if all((network_interface_id, network_interface_name)):
+        raise SaltInvocationError('Only one of network_interface_id or '
+                                  'network_interface_name may be provided.')
+    if network_interface_name:
+        network_interface_id = get_network_interface_id(network_interface_name,
+                                                        region=region, key=key,
+                                                        keyid=keyid,
+                                                        profile=profile)
+        if not network_interface_id:
+            log.warning(
+                "Given network_interface_name '{0}' cannot be mapped to an "
+                "network_interface_id".format(network_interface_name)
+            )
+
+    if network_interface_id:
+        interface = boto.ec2.networkinterface.NetworkInterfaceSpecification(
+            network_interface_id=network_interface_id,
+            device_index=0
+        )
+    else:
+        interface = boto.ec2.networkinterface.NetworkInterfaceSpecification(
+            subnet_id=subnet_id,
+            groups=security_group_ids,
+            device_index=0
+        )
+    interfaces = boto.ec2.networkinterface.NetworkInterfaceCollection(interface)
 
     conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
 
-    reservation = conn.run_instances(image_id, instance_type=instance_type,
-                                     key_name=key_name,
-                                     security_groups=security_groups,
-                                     user_data=user_data,
-                                     placement=placement)
+    reservation = conn.run_instances(image_id, key_name=key_name, security_groups=security_groups,
+                                     user_data=user_data, instance_type=instance_type,
+                                     placement=placement, kernel_id=kernel_id, ramdisk_id=ramdisk_id,
+                                     monitoring_enabled=monitoring_enabled,
+                                     private_ip_address=private_ip_address,
+                                     block_device_map=_to_blockdev_map(block_device_map),
+                                     disable_api_termination=disable_api_termination,
+                                     instance_initiated_shutdown_behavior=instance_initiated_shutdown_behavior,
+                                     placement_group=placement_group, client_token=client_token,
+                                     additional_info=additional_info,
+                                     tenancy=tenancy, instance_profile_arn=instance_profile_arn,
+                                     instance_profile_name=instance_profile_name, ebs_optimized=ebs_optimized,
+                                     network_interfaces=interfaces)
     if not reservation:
-        log.warning('instances could not be reserved')
+        log.warning('Instance could not be reserved')
         return False
 
     instance = reservation.instances[0]
@@ -596,9 +912,9 @@ def run(image_id, name=None, tags=None, instance_type='m1.small',
             instance.add_tag('Name', name)
         if tags:
             instance.add_tags(tags)
-        return True
+        return {'instance_id': instance.id}
     else:
-        log.warning('instance could not be started -- '
+        log.warning('Instance could not be started -- '
                     'status is "{0}"'.format(status))
 
 
@@ -731,7 +1047,8 @@ def get_keys(keynames=None, filters=None, region=None, key=None,
         return False
 
 
-def get_attribute(attribute, instance_name=None, instance_id=None, region=None, key=None, keyid=None, profile=None):
+def get_attribute(attribute, instance_name=None, instance_id=None, region=None, key=None,
+                  keyid=None, profile=None):
     '''
     Get an EC2 instance attribute.
 
@@ -762,7 +1079,8 @@ def get_attribute(attribute, instance_name=None, instance_id=None, region=None, 
                       'instanceInitiatedShutdownBehavior', 'rootDeviceName', 'blockDeviceMapping', 'productCodes',
                       'sourceDestCheck', 'groupSet', 'ebsOptimized', 'sriovNetSupport']
     if not any((instance_name, instance_id)):
-        raise SaltInvocationError('At least one of the following must be specified: instance_name or instance_id.')
+        raise SaltInvocationError('At least one of the following must be specified: '
+                                  'instance_name or instance_id.')
     if instance_name and instance_id:
         raise SaltInvocationError('Both instance_name and instance_id can not be specified in the same command.')
     if attribute not in attribute_list:
@@ -770,8 +1088,12 @@ def get_attribute(attribute, instance_name=None, instance_id=None, region=None, 
     try:
         if instance_name:
             instances = find_instances(name=instance_name, region=region, key=key, keyid=keyid, profile=profile)
-            if len(instances) != 1:
-                raise CommandExecutionError('Found more than one EC2 instance matching the criteria.')
+            if len(instances) > 1:
+                log.error('Found more than one EC2 instance matching the criteria.')
+                return False
+            elif len(instances) < 1:
+                log.error('Found no EC2 instance matching the criteria.')
+                return False
             instance_id = instances[0]
         instance_attribute = conn.get_instance_attribute(instance_id, attribute)
         if not instance_attribute:
@@ -1206,3 +1528,162 @@ def modify_network_interface_attribute(
     except boto.exception.EC2ResponseError as e:
         r['error'] = __utils__['boto.get_error'](e)
     return r
+
+
+def get_all_volumes(volume_ids=None, filters=None, return_objs=False,
+                    region=None, key=None, keyid=None, profile=None):
+    '''
+    Get a list of all EBS volumes, optionally filtered by provided 'filters' param
+
+    volume_ids
+        (list) - Optional list of volume_ids.  If provided, only the volumes
+        associated with those in the list will be returned.
+    filters
+        (dict) - Additional constraints on which volumes to return.  Valid filters are:
+            attachment.attach-time - The time stamp when the attachment initiated.
+            attachment.delete-on-termination - Whether the volume is deleted on instance termination.
+            attachment.device - The device name that is exposed to the instance (for example, /dev/sda1).
+            attachment.instance-id - The ID of the instance the volume is attached to.
+            attachment.status - The attachment state (attaching | attached | detaching | detached).
+            availability-zone - The Availability Zone in which the volume was created.
+            create-time - The time stamp when the volume was created.
+            encrypted - The encryption status of the volume.
+            size - The size of the volume, in GiB.
+            snapshot-id - The snapshot from which the volume was created.
+            status - The status of the volume (creating | available | in-use | deleting | deleted | error).
+            tag:key=value - The key/value combination of a tag assigned to the resource.
+            volume-id - The volume ID.
+            volume-type - The Amazon EBS volume type. This can be gp2 for General Purpose SSD, io1 for
+                          Provisioned IOPS SSD, st1 for Throughput Optimized HDD, sc1 for Cold HDD, or
+                          standard for Magnetic volumes.
+    return_objs
+        (bool) - Changes the return type from list of volume IDs to list of boto.ec2.volume.Volume objects
+
+    returns
+        (list) - A list of the requested values:  Either the volume IDs; or, if return_objs is true,
+                 boto.ec2.volume.Volume objects.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.get_all_volumes filters='{"tag:Name": "myVolume01"}'
+
+    .. versionadded:: Carbon
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+
+    try:
+        ret = conn.get_all_volumes(volume_ids=volume_ids, filters=filters)
+        return ret if return_objs else [r.id for r in ret]
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return []
+
+
+def create_tags(resource_ids, tags, region=None, key=None, keyid=None, profile=None):
+    '''
+    Create new metadata tags for the specified resource ids.
+
+    resource_ids
+        (string) or (list) – List of resource IDs.  A plain string will be converted to a list of one element.
+    tags
+        (dict) – Dictionary of name/value pairs. To create only a tag name, pass '' as the value.
+
+    returns
+        (bool) - True on success, False on failure.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.create_tags vol-12345678 '{"Name": "myVolume01"}'
+
+    .. versionadded:: Carbon
+
+    '''
+    if not isinstance(resource_ids, list):
+        resource_ids = [resource_ids]
+
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    try:
+        conn.create_tags(resource_ids, tags)
+        return True
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return False
+
+
+def detach_volume(volume_id, instance_id=None, device=None, force=False,
+                  region=None, key=None, keyid=None, profile=None):
+    '''
+    Detach an EBS volume from an EC2 instance.
+
+    volume_id
+        (string) – The ID of the EBS volume to be detached.
+    instance_id
+        (string) – The ID of the EC2 instance from which it will be detached.
+    device
+        (string) – The device on the instance through which the volume is exposted (e.g. /dev/sdh)
+    force
+        (bool) – Forces detachment if the previous detachment attempt did not occur cleanly.
+                 This option can lead to data loss or a corrupted file system. Use this option
+                 only as a last resort to detach a volume from a failed instance. The instance
+                 will not have an opportunity to flush file system caches nor file system meta data.
+                 If you use this option, you must perform file system check and repair procedures.
+
+    returns
+        (bool) - True on success, False on failure.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.detach_volume vol-12345678 i-87654321
+
+    .. versionadded:: Carbon
+
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    try:
+        return conn.detach_volume(volume_id, instance_id, device, force)
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return False
+
+
+def delete_volume(volume_id, instance_id=None, device=None, force=False,
+                  region=None, key=None, keyid=None, profile=None):
+    '''
+    Detach an EBS volume from an EC2 instance.
+
+    volume_id
+        (string) – The ID of the EBS volume to be deleted.
+    force
+        (bool) – Forces deletion even if the device has not yet been detached from its instance.
+
+    returns
+        (bool) - True on success, False on failure.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call boto_ec2.delete_volume vol-12345678
+
+    .. versionadded:: Carbon
+
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    try:
+        return conn.delete_volume(volume_id)
+    except boto.exception.BotoServerError as e:
+        if not force:
+            log.error(e)
+            return False
+    try:
+        conn.detach_volume(volume_id, force=force)
+        return conn.delete_volume(volume_id)
+    except boto.exception.BotoServerError as e:
+        log.error(e)
+        return False
