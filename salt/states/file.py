@@ -1937,9 +1937,9 @@ def directory(name,
 
     max_depth
         Limit the recursion depth. The default is no limit=None.
-        'max_depth' and 'clean' are mutally exclusive.
+        'max_depth' and 'clean' are mutually exclusive.
 
-        .. versionadded:: 2016.4.0
+        .. versionadded:: Carbon
 
     dir_mode / mode
         The permissions mode to set any directories created. Not supported on
