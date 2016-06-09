@@ -966,7 +966,7 @@ DEFAULT_MINION_OPTS = {
     'tcp_pub_port': 4510,
     'tcp_pull_port': 4511,
     'log_file': os.path.join(salt.syspaths.LOGS_DIR, 'minion'),
-    'log_level': 'info',
+    'log_level': 'warning',
     'log_level_logfile': None,
     'log_datefmt': _DFLT_LOG_DATEFMT,
     'log_datefmt_logfile': _DFLT_LOG_DATEFMT_LOGFILE,
@@ -1220,7 +1220,7 @@ DEFAULT_MASTER_OPTS = {
     'tcp_master_publish_pull': 4514,
     'tcp_master_workers': 4515,
     'log_file': os.path.join(salt.syspaths.LOGS_DIR, 'master'),
-    'log_level': 'info',
+    'log_level': 'warning',
     'log_level_logfile': None,
     'log_datefmt': _DFLT_LOG_DATEFMT,
     'log_datefmt_logfile': _DFLT_LOG_DATEFMT_LOGFILE,
@@ -1361,7 +1361,7 @@ CLOUD_CONFIG_DEFAULTS = {
     'deploy_scripts_search_path': 'cloud.deploy.d',
     # Logging defaults
     'log_file': os.path.join(salt.syspaths.LOGS_DIR, 'cloud'),
-    'log_level': 'info',
+    'log_level': 'warning',
     'log_level_logfile': None,
     'log_datefmt': _DFLT_LOG_DATEFMT,
     'log_datefmt_logfile': _DFLT_LOG_DATEFMT_LOGFILE,
@@ -2957,7 +2957,12 @@ def apply_minion_config(overrides=None,
     # Enabling open mode requires that the value be set to True, and
     # nothing else!
     opts['open_mode'] = opts['open_mode'] is True
-
+    # Make sure ext_mods gets set if it is an untrue value
+    # (here to catch older bad configs)
+    opts['extension_modules'] = (
+        opts.get('extension_modules') or
+        os.path.join(opts['cachedir'], 'extmods')
+    )
     # Set up the utils_dirs location from the extension_modules location
     opts['utils_dirs'] = (
         opts.get('utils_dirs') or
