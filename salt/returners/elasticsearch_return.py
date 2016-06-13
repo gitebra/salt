@@ -4,7 +4,7 @@ Return data to an elasticsearch server for indexing.
 
 :maintainer:    Jurnell Cockhren <jurnell.cockhren@sophicware.com>, Arnold Bechtoldt <mail@arnoldbechtoldt.com>
 :maturity:      New
-:depends:       `elasticsearch-py <http://elasticsearch-py.readthedocs.org/en/latest/>`_
+:depends:       `elasticsearch-py <https://elasticsearch-py.readthedocs.io/en/latest/>`_
 :platform:      all
 
 To enable this returner the elasticsearch python client must be installed
@@ -164,7 +164,7 @@ def prep_jid(nocache=False, passed_jid=None):  # pylint: disable=unused-argument
     return passed_jid if passed_jid is not None else salt.utils.jid.gen_jid()
 
 
-def save_load(jid, load):
+def save_load(jid, load, minions=None):
     '''
     Save the load to the specified jid id
 
