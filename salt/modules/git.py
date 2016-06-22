@@ -143,7 +143,7 @@ def _format_opts(opts):
 
 def _git_run(command, cwd=None, runas=None, identity=None,
              ignore_retcode=False, failhard=True, redirect_stderr=False,
-             **kwargs):
+             saltenv='base', **kwargs):
     '''
     simple, throw an exception with the error message on an error return code.
 
@@ -168,7 +168,7 @@ def _git_run(command, cwd=None, runas=None, identity=None,
         for id_file in identity:
             if 'salt://' in id_file:
                 _id_file = id_file
-                id_file = __salt__['cp.cache_file'](id_file)
+                id_file = __salt__['cp.cache_file'](id_file, saltenv)
                 if not id_file:
                     log.error('identity {0} does not exist.'.format(_id_file))
                     continue
@@ -681,7 +681,8 @@ def clone(cwd,
           https_user=None,
           https_pass=None,
           ignore_retcode=False,
-          repository=None):
+          repository=None,
+          saltenv='base'):
     '''
     Interface to `git-clone(1)`_
 
@@ -752,6 +753,11 @@ def clone(cwd,
 
         .. versionadded:: 2015.8.0
 
+    saltenv
+        The default salt environment to pull sls files from
+
+        .. versionadded:: 2016.3.1
+
     .. _`git-clone(1)`: http://git-scm.com/docs/git-clone
 
     CLI Example:
@@ -803,7 +809,8 @@ def clone(cwd,
              cwd=clone_cwd,
              runas=user,
              identity=identity,
-             ignore_retcode=ignore_retcode)
+             ignore_retcode=ignore_retcode,
+             saltenv=saltenv)
     return True
 
 
@@ -1376,7 +1383,8 @@ def fetch(cwd,
           opts='',
           user=None,
           identity=None,
-          ignore_retcode=False):
+          ignore_retcode=False,
+          saltenv='base'):
     '''
     .. versionchanged:: 2015.8.2
         Return data is now a dictionary containing information on branches and
@@ -1445,6 +1453,11 @@ def fetch(cwd,
 
         .. versionadded:: 2015.8.0
 
+    saltenv
+        The default salt environment to pull sls files from
+
+        .. versionadded:: 2016.3.1
+
     .. _`git-fetch(1)`: http://git-scm.com/docs/git-fetch
 
 
@@ -1484,7 +1497,8 @@ def fetch(cwd,
                       runas=user,
                       identity=identity,
                       ignore_retcode=ignore_retcode,
-                      redirect_stderr=True)['stdout']
+                      redirect_stderr=True,
+                      saltenv=saltenv)['stdout']
 
     update_re = re.compile(
         r'[\s*]*(?:([0-9a-f]+)\.\.([0-9a-f]+)|'
@@ -2017,7 +2031,8 @@ def ls_remote(cwd=None,
               identity=None,
               https_user=None,
               https_pass=None,
-              ignore_retcode=False):
+              ignore_retcode=False,
+              saltenv='base'):
     '''
     Interface to `git-ls-remote(1)`_. Returns the upstream hash for a remote
     reference.
@@ -2094,6 +2109,11 @@ def ls_remote(cwd=None,
 
         .. versionadded:: 2015.8.0
 
+    saltenv
+        The default salt environment to pull sls files from
+
+        .. versionadded:: 2016.3.1
+
     .. _`git-ls-remote(1)`: http://git-scm.com/docs/git-ls-remote
 
 
@@ -2126,7 +2146,8 @@ def ls_remote(cwd=None,
                       cwd=cwd,
                       runas=user,
                       identity=identity,
-                      ignore_retcode=ignore_retcode)['stdout']
+                      ignore_retcode=ignore_retcode,
+                      saltenv=saltenv)['stdout']
     ret = {}
     for line in output.splitlines():
         try:
@@ -2465,7 +2486,7 @@ def merge_tree(cwd,
                     ignore_retcode=ignore_retcode)['stdout']
 
 
-def pull(cwd, opts='', user=None, identity=None, ignore_retcode=False):
+def pull(cwd, opts='', user=None, identity=None, ignore_retcode=False, saltenv='base'):
     '''
     Interface to `git-pull(1)`_
 
@@ -2513,6 +2534,11 @@ def pull(cwd, opts='', user=None, identity=None, ignore_retcode=False):
 
         .. versionadded:: 2015.8.0
 
+    saltenv
+        The default salt environment to pull sls files from
+
+        .. versionadded:: 2016.3.1
+
     .. _`git-pull(1)`: http://git-scm.com/docs/git-pull
 
     CLI Example:
@@ -2528,7 +2554,8 @@ def pull(cwd, opts='', user=None, identity=None, ignore_retcode=False):
                     cwd=cwd,
                     runas=user,
                     identity=identity,
-                    ignore_retcode=ignore_retcode)['stdout']
+                    ignore_retcode=ignore_retcode,
+                    saltenv=saltenv)['stdout']
 
 
 def push(cwd,
@@ -2538,6 +2565,7 @@ def push(cwd,
          user=None,
          identity=None,
          ignore_retcode=False,
+         saltenv='base',
          **kwargs):
     '''
     Interface to `git-push(1)`_
@@ -2604,6 +2632,11 @@ def push(cwd,
 
         .. versionadded:: 2015.8.0
 
+    saltenv
+        The default salt environment to pull sls files from
+
+        .. versionadded:: 2016.3.1
+
     .. _`git-push(1)`: http://git-scm.com/docs/git-push
     .. _refspec: http://git-scm.com/book/en/v2/Git-Internals-The-Refspec
 
@@ -2642,7 +2675,8 @@ def push(cwd,
                     cwd=cwd,
                     runas=user,
                     identity=identity,
-                    ignore_retcode=ignore_retcode)['stdout']
+                    ignore_retcode=ignore_retcode,
+                    saltenv=saltenv)['stdout']
 
 
 def rebase(cwd, rev='master', opts='', user=None, ignore_retcode=False):
@@ -2763,7 +2797,8 @@ def remote_refs(url,
                 identity=None,
                 https_user=None,
                 https_pass=None,
-                ignore_retcode=False):
+                ignore_retcode=False,
+                saltenv='base'):
     '''
     .. versionadded:: 2015.8.0
 
@@ -2815,6 +2850,11 @@ def remote_refs(url,
         If ``True``, do not log an error to the minion log if the git command
         returns a nonzero exit status.
 
+    saltenv
+        The default salt environment to pull sls files from
+
+        .. versionadded:: 2016.3.1
+
     CLI Example:
 
     .. code-block:: bash
@@ -2836,7 +2876,8 @@ def remote_refs(url,
     output = _git_run(command,
                       runas=user,
                       identity=identity,
-                      ignore_retcode=ignore_retcode)['stdout']
+                      ignore_retcode=ignore_retcode,
+                      saltenv=saltenv)['stdout']
     ret = {}
     for line in salt.utils.itertools.split(output, '\n'):
         try:
@@ -3325,6 +3366,7 @@ def submodule(cwd,
               user=None,
               identity=None,
               ignore_retcode=False,
+              saltenv='base',
               **kwargs):
     '''
     .. versionchanged:: 2015.8.0
@@ -3394,6 +3436,11 @@ def submodule(cwd,
 
         .. versionadded:: 2015.8.0
 
+    saltenv
+        The default salt environment to pull sls files from
+
+        .. versionadded:: 2016.3.1
+
     .. _`git-submodule(1)`: http://git-scm.com/docs/git-submodule
 
     CLI Example:
@@ -3434,7 +3481,8 @@ def submodule(cwd,
                     cwd=cwd,
                     runas=user,
                     identity=identity,
-                    ignore_retcode=ignore_retcode)['stdout']
+                    ignore_retcode=ignore_retcode,
+                    saltenv=saltenv)['stdout']
 
 
 def symbolic_ref(cwd,
