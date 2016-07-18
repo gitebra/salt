@@ -450,7 +450,7 @@ def _find_install_targets(name=None,
             # package's name and version
             err = 'Unable to cache {0}: {1}'
             try:
-                cached_path = __salt__['cp.cache_file'](val)
+                cached_path = __salt__['cp.cache_file'](val, saltenv=kwargs['saltenv'])
             except CommandExecutionError as exc:
                 problems.append(err.format(val, exc))
                 continue
@@ -2492,6 +2492,9 @@ def mod_aggregate(low, chunks, running):
                 continue
             # Check for the same function
             if chunk.get('fun') != low.get('fun'):
+                continue
+            # Check for the same repo
+            if chunk.get('fromrepo') != low.get('fromrepo'):
                 continue
             # Pull out the pkg names!
             if 'pkgs' in chunk:
