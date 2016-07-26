@@ -936,6 +936,7 @@ class AESFuncs(object):
         '''
         self.fs_ = salt.fileserver.Fileserver(self.opts)
         self._serve_file = self.fs_.serve_file
+        self._file_find = self.fs_._find_file
         self._file_hash = self.fs_.file_hash
         self._file_list = self.fs_.file_list
         self._file_list_emptydirs = self.fs_.file_list_emptydirs
@@ -2317,7 +2318,7 @@ class ClearFuncs(object):
         # always write out to the master job caches
         try:
             fstr = '{0}.save_load'.format(self.opts['master_job_cache'])
-            self.mminion.returners[fstr](clear_load['jid'], clear_load)
+            self.mminion.returners[fstr](clear_load['jid'], clear_load, minions)
         except KeyError:
             log.critical(
                 'The specified returner used for the master job cache '

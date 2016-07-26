@@ -246,9 +246,11 @@ def access_keys(opts):
     if opts.get('user'):
         acl_users.add(opts['user'])
     acl_users.add(salt.utils.get_user())
-    if HAS_PWD:
+    if opts['client_acl_verify'] and HAS_PWD:
+        log.profile('Beginning pwd.getpwall() call in masterarpi acess_keys function')
         for user in pwd.getpwall():
             users.append(user.pw_name)
+        log.profile('End pwd.getpwall() call in masterarpi acess_keys function')
     for user in acl_users:
         log.info(
             'Preparing the {0} key for local communication'.format(
@@ -256,10 +258,12 @@ def access_keys(opts):
             )
         )
 
-        if HAS_PWD:
+        if opts['client_acl_verify'] and HAS_PWD:
             if user not in users:
                 try:
+                    log.profile('Beginning pwd.getpnam() call in masterarpi acess_keys function')
                     user = pwd.getpwnam(user).pw_name
+                    log.profile('Beginning pwd.getpwnam() call in masterarpi acess_keys function')
                 except KeyError:
                     log.error('ACL user {0} is not available'.format(user))
                     continue
@@ -451,6 +455,7 @@ class RemoteFuncs(object):
         '''
         fs_ = salt.fileserver.Fileserver(self.opts)
         self._serve_file = fs_.serve_file
+        self._file_find = fs_._find_file
         self._file_hash = fs_.file_hash
         self._file_list = fs_.file_list
         self._file_list_emptydirs = fs_.file_list_emptydirs
