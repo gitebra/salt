@@ -1021,7 +1021,11 @@ def request_instance(call=None, kwargs=None):  # pylint: disable=unused-argument
     poller = compconn.virtual_machines.create_or_update(
         vm_['resource_group'], vm_['name'], params
     )
-    poller.wait()
+    try:
+        poller.wait()
+    except CloudError as exc:
+        log.warn('There was a cloud error: {0}'.format(exc))
+        log.warn('This may or may not indicate an actual problem')
 
     try:
         return show_instance(vm_['name'], call='action')
@@ -1052,11 +1056,12 @@ def create(vm_):
         'event',
         'starting create',
         'salt/cloud/{0}/creating'.format(vm_['name']),
-        {
+        args={
             'name': vm_['name'],
             'profile': vm_['profile'],
             'provider': vm_['driver'],
         },
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
     log.info('Creating Cloud VM {0}'.format(vm_['name']))
@@ -1129,11 +1134,12 @@ def create(vm_):
         'event',
         'created instance',
         'salt/cloud/{0}/created'.format(vm_['name']),
-        {
+        args={
             'name': vm_['name'],
             'profile': vm_['profile'],
             'provider': vm_['driver'],
         },
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 

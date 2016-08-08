@@ -159,6 +159,12 @@ VALID_OPTS = {
     # master
     'syndic_finger': str,
 
+    # The caching mechanism to use for the PKI key store. Can substantially decrease master publish
+    # times. Available types:
+    # 'maint': Runs on a schedule as a part of the maintanence process.
+    # '': Disable the key cache [default]
+    'key_cache': str,
+
     # The user under which the daemon should run
     'user': str,
 
@@ -429,9 +435,9 @@ VALID_OPTS = {
     'return_retry_timer': int,
     'return_retry_timer_max': int,
 
-    # Specify a returner in which all events will be sent to. Requires that the returner in question
-    # have an event_return(event) function!
-    'event_return': str,
+    # Specify one or more returners in which all events will be sent to. Requires that the returners
+    # in question have an event_return(event) function!
+    'event_return': (list, string_types),
 
     # The number of events to queue up in memory before pushing them down the pipe to an event returner
     # specified by 'event_return'
@@ -674,6 +680,9 @@ VALID_OPTS = {
     # Defines engines. See https://docs.saltstack.com/en/latest/topics/engines/
     'engines': list,
 
+    # Whether or not to store runner returns in the job cache
+    'runner_returns': bool,
+
     'serial': str,
     'search': str,
 
@@ -881,6 +890,8 @@ VALID_OPTS = {
     'proxy_password': str,
     'proxy_port': int,
 
+    # Minion de-dup jid cache max size
+    'minion_jid_queue_hwm': int,
 }
 
 # default configurations
@@ -1116,6 +1127,7 @@ DEFAULT_MINION_OPTS = {
     'proxy_username': '',
     'proxy_password': '',
     'proxy_port': 0,
+    'minion_jid_queue_hwm': 100,
 }
 
 DEFAULT_MASTER_OPTS = {
@@ -1135,6 +1147,7 @@ DEFAULT_MASTER_OPTS = {
     'keep_jobs': 24,
     'root_dir': salt.syspaths.ROOT_DIR,
     'pki_dir': os.path.join(salt.syspaths.CONFIG_DIR, 'pki', 'master'),
+    'key_cache': '',
     'cachedir': os.path.join(salt.syspaths.CACHE_DIR, 'master'),
     'file_roots': {
         'base': [salt.syspaths.BASE_FILE_ROOTS_DIR,
@@ -1289,6 +1302,7 @@ DEFAULT_MASTER_OPTS = {
     'event_return_whitelist': [],
     'event_return_blacklist': [],
     'event_match_type': 'startswith',
+    'runner_returns': False,
     'serial': 'msgpack',
     'state_verbose': True,
     'state_output': 'full',
@@ -2852,7 +2866,7 @@ def is_profile_configured(opts, provider, profile_name, vm_=None):
         non_size_drivers.append('linode')
 
     # If cloning on VMware, specifying image is not necessary.
-    if driver == 'vmware' and profile_key.get('image', True):
+    if driver == 'vmware' and 'image' not in list(profile_key.keys()):
         non_image_drivers.append('vmware')
 
     if driver not in non_image_drivers:

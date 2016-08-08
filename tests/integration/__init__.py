@@ -494,12 +494,15 @@ class SaltDaemonScriptBase(SaltScriptBase, ShellTestCase):
         Terminate the started daemon
         '''
         log.info('Terminating %s %s DAEMON', self.display_name, self.__class__.__name__)
+
+        children = []
         if HAS_PSUTIL:
             try:
                 parent = psutil.Process(self._process.pid)
-                children = parent.children(recursive=True)
+                if hasattr(parent, 'children'):
+                    children = parent.children(recursive=True)
             except psutil.NoSuchProcess:
-                children = []
+                pass
         self._running.clear()
         self._connectable.clear()
         time.sleep(0.0125)
@@ -1018,6 +1021,8 @@ class TestDaemon(object):
         minion_opts['config_dir'] = TMP_CONF_DIR
         minion_opts['root_dir'] = os.path.join(TMP, 'rootdir')
         minion_opts['pki_dir'] = os.path.join(TMP, 'rootdir', 'pki')
+        minion_opts['hosts.file'] = os.path.join(TMP, 'rootdir', 'hosts')
+        minion_opts['aliases.file'] = os.path.join(TMP, 'rootdir', 'aliases')
 
         # This sub_minion also connects to master
         sub_minion_opts = salt.config._read_conf_file(os.path.join(CONF_DIR, 'sub_minion'))
@@ -1026,6 +1031,8 @@ class TestDaemon(object):
         sub_minion_opts['config_dir'] = TMP_SUB_MINION_CONF_DIR
         sub_minion_opts['root_dir'] = os.path.join(TMP, 'rootdir-sub-minion')
         sub_minion_opts['pki_dir'] = os.path.join(TMP, 'rootdir-sub-minion', 'pki', 'minion')
+        sub_minion_opts['hosts.file'] = os.path.join(TMP, 'rootdir', 'hosts')
+        sub_minion_opts['aliases.file'] = os.path.join(TMP, 'rootdir', 'aliases')
 
         # This is the master of masters
         syndic_master_opts = salt.config._read_conf_file(os.path.join(CONF_DIR, 'syndic_master'))
@@ -1663,6 +1670,12 @@ class ModuleCase(TestCase, SaltClientTestCaseMixIn):
     Execute a module function
     '''
 
+    def runTest(self):
+        '''
+        TODO remove after salt-testing PR #74 is merged and deployed
+        '''
+        super(ModuleCase, self).runTest()
+
     def minion_run(self, _function, *args, **kw):
         '''
         Run a single salt function on the 'minion' target and condition
@@ -1798,19 +1811,19 @@ class ShellCase(AdaptedConfigurationTestCaseMixIn, ShellTestCase, ScriptPathMixi
         except OSError:
             os.chdir(INTEGRATION_TEST_DIR)
 
-    def run_salt(self, arg_str, with_retcode=False, catch_stderr=False, timeout=15):  # pylint: disable=W0221
+    def run_salt(self, arg_str, with_retcode=False, catch_stderr=False, timeout=30):  # pylint: disable=W0221
         '''
         Execute salt
         '''
         arg_str = '-c {0} {1}'.format(self.get_config_dir(), arg_str)
-        return self.run_script('salt', arg_str, with_retcode=with_retcode, catch_stderr=catch_stderr, timeout=30)
+        return self.run_script('salt', arg_str, with_retcode=with_retcode, catch_stderr=catch_stderr, timeout=timeout)
 
-    def run_ssh(self, arg_str, with_retcode=False, catch_stderr=False):
+    def run_ssh(self, arg_str, with_retcode=False, catch_stderr=False, timeout=25):  # pylint: disable=W0221
         '''
         Execute salt-ssh
         '''
         arg_str = '-W -c {0} -i --priv {1} --roster-file {2} --out=json localhost {3}'.format(self.get_config_dir(), os.path.join(TMP_CONF_DIR, 'key_test'), os.path.join(TMP_CONF_DIR, 'roster'), arg_str)
-        return self.run_script('salt-ssh', arg_str, with_retcode=with_retcode, catch_stderr=catch_stderr, raw=True, timeout=30)
+        return self.run_script('salt-ssh', arg_str, with_retcode=with_retcode, catch_stderr=catch_stderr, timeout=timeout, raw=True)
 
     def run_run(self, arg_str, with_retcode=False, catch_stderr=False, async=False, timeout=60, config_dir=None):
         '''
@@ -1832,7 +1845,7 @@ class ShellCase(AdaptedConfigurationTestCaseMixIn, ShellTestCase, ScriptPathMixi
             '{0} {1} {2}'.format(options, fun, ' '.join(arg)), catch_stderr=kwargs.get('catch_stderr', None)
         )
         opts = {}
-        opts.update(self.get_config('master'))
+        opts.update(self.get_config('client_config'))
         opts.update({'doc': False, 'fun': fun, 'arg': arg})
         with RedirectStdStreams():
             runner = salt.runner.Runner(opts)
@@ -1944,7 +1957,7 @@ class SSHCase(ShellCase):
         return '{0} {1}'.format(function, ' '.join(arg))
 
     def run_function(self, function, arg=(), timeout=25, **kwargs):
-        ret = self.run_ssh(self._arg_str(function, arg))
+        ret = self.run_ssh(self._arg_str(function, arg), timeout=timeout)
         try:
             return json.loads(ret)['localhost']
         except Exception:

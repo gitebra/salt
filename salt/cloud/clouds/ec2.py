@@ -1906,7 +1906,8 @@ def request_instance(vm_=None, call=None):
         'event',
         'requesting instance',
         'salt/cloud/{0}/requesting'.format(vm_['name']),
-        {'kwargs': params, 'location': location},
+        args={'kwargs': params, 'location': location},
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 
@@ -1985,6 +1986,7 @@ def request_instance(vm_=None, call=None):
             'event',
             'waiting for spot instance',
             'salt/cloud/{0}/waiting_for_spot'.format(vm_['name']),
+            sock_dir=__opts__['sock_dir'],
             transport=__opts__['transport']
         )
 
@@ -2048,7 +2050,8 @@ def query_instance(vm_=None, call=None):
         'event',
         'querying instance',
         'salt/cloud/{0}/querying'.format(vm_['name']),
-        {'instance_id': instance_id},
+        args={'instance_id': instance_id},
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 
@@ -2154,7 +2157,8 @@ def query_instance(vm_=None, call=None):
             'event',
             'instance queried',
             'salt/cloud/{0}/query_reactor'.format(vm_['name']),
-            {'data': data},
+            args={'data': data},
+            sock_dir=__opts__['sock_dir'],
             transport=__opts__['transport']
         )
 
@@ -2192,7 +2196,8 @@ def wait_for_instance(
         'event',
         'waiting for ssh',
         'salt/cloud/{0}/waiting_for_ssh'.format(vm_['name']),
-        {'ip_address': ip_address},
+        args={'ip_address': ip_address},
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 
@@ -2371,7 +2376,8 @@ def wait_for_instance(
             'event',
             'ssh is available',
             'salt/cloud/{0}/ssh_ready_reactor'.format(vm_['name']),
-            {'ip_address': ip_address},
+            args={'ip_address': ip_address},
+            sock_dir=__opts__['sock_dir'],
             transport=__opts__['transport']
         )
 
@@ -2443,11 +2449,12 @@ def create(vm_=None, call=None):
         'event',
         'starting create',
         'salt/cloud/{0}/creating'.format(vm_['name']),
-        {
+        args={
             'name': vm_['name'],
             'profile': vm_['profile'],
             'provider': vm_['driver'],
         },
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
     salt.utils.cloud.cachedir_index_add(
@@ -2544,7 +2551,8 @@ def create(vm_=None, call=None):
         'event',
         'setting tags',
         'salt/cloud/{0}/tagging'.format(vm_['name']),
-        {'tags': tags},
+        args={'tags': tags},
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 
@@ -2613,7 +2621,8 @@ def create(vm_=None, call=None):
             'event',
             'attaching volumes',
             'salt/cloud/{0}/attaching_volumes'.format(vm_['name']),
-            {'volumes': volumes},
+            args={'volumes': volumes},
+            sock_dir=__opts__['sock_dir'],
             transport=__opts__['transport']
         )
 
@@ -2653,7 +2662,8 @@ def create(vm_=None, call=None):
         'event',
         'created instance',
         'salt/cloud/{0}/created'.format(vm_['name']),
-        event_data,
+        args=event_data,
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 
@@ -3072,7 +3082,8 @@ def destroy(name, call=None):
         'event',
         'destroying instance',
         'salt/cloud/{0}/destroying'.format(name),
-        {'name': name, 'instance_id': instance_id},
+        args={'name': name, 'instance_id': instance_id},
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 
@@ -3134,7 +3145,8 @@ def destroy(name, call=None):
         'event',
         'destroyed instance',
         'salt/cloud/{0}/destroyed'.format(name),
-        {'name': name, 'instance_id': instance_id},
+        args={'name': name, 'instance_id': instance_id},
+        sock_dir=__opts__['sock_dir'],
         transport=__opts__['transport']
     )
 

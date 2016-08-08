@@ -354,18 +354,13 @@ def list_functions(*args, **kwargs):  # pylint: disable=unused-argument
 
     names = set()
     for module in args:
-        _use_fnmatch = False
         if '*' in module:
-            target_mod = module
-            _use_fnmatch = True
-        elif module:
+            for func in fnmatch.filter(__salt__, module):
+                names.add(func)
+        else:
             # allow both "sys" and "sys." to match sys, without also matching
             # sysctl
             module = module + '.' if not module.endswith('.') else module
-        if _use_fnmatch:
-            for func in fnmatch.filter(__salt__, target_mod):
-                names.add(func)
-        else:
             for func in __salt__:
                 if func.startswith(module):
                     names.add(func)
@@ -608,17 +603,18 @@ def list_state_modules(*args):
         for func in st_.states:
             log.debug('func {0}'.format(func))
             comps = func.split('.')
-            if len(comps) < 2:
-                continue
             modules.add(comps[0])
         return sorted(modules)
 
     for module in args:
-        for func in fnmatch.filter(st_.states, module):
-            comps = func.split('.')
-            if len(comps) < 2:
-                continue
-            modules.add(comps[0])
+        if '*' not in module:
+            for func in st_.states:
+                comps = func.split('.')
+                if comps[0] == module:
+                    modules.add(comps[0])
+        else:
+            for func in fnmatch.filter(st_.states, module):
+                modules.add(func.split('.')[0])
     return sorted(modules)
 
 

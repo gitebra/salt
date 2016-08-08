@@ -492,8 +492,9 @@ local job cache on the master.
 
 Default: ``''``
 
-Specify the returner to use to log events. A returner may have installation and
-configuration requirements. Read the returner's documentation.
+Specify the returner(s) to use to log events. Each returner may have
+installation and configuration requirements. Read the returner's
+documentation.
 
 .. note::
 
@@ -502,7 +503,9 @@ configuration requirements. Read the returner's documentation.
 
 .. code-block:: yaml
 
-    event_return: cassandra_cql
+    event_return:
+      - syslog
+      - splunk
 
 .. conf_master:: event_return_queue
 
@@ -1262,6 +1265,20 @@ or just post what changes are going to be made.
 .. code-block:: yaml
 
     test: False
+
+.. conf_master:: runner_returns
+
+``runner_returns``
+------------------
+
+Default: ``False``
+
+If set to ``True``, runner jobs will be saved to job cache (defined by
+:conf_master:`master_job_cache`).
+
+.. code-block:: yaml
+
+    runner_returns: True
 
 Master File Server Settings
 ===========================

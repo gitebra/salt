@@ -733,6 +733,9 @@ def installed(
                   - dos2unix
                   - salt-minion: 2015.8.5-1.el6
 
+        If the version given is the string ``latest``, the latest available
+        package version will be installed à la ``pkg.latest``.
+
     :param bool refresh:
         This parameter controls whether or not the packge repo database is
         updated prior to installing the requested package(s).
@@ -750,6 +753,37 @@ def installed(
         will be performed for ``pkg`` states which do not explicitly set
         ``refresh`` to ``True``. This prevents needless additional refreshes
         from slowing down the Salt run.
+
+    :param str cache_valid_time:
+
+        .. versionadded:: Carbon
+
+        This parameter sets the value in seconds after which the cache is
+        marked as invalid, and a cache update is necessary. This overwrites
+        the ``refresh`` parameter's default behavior.
+
+        Example:
+
+        .. code-block:: yaml
+
+            httpd:
+              pkg.installed:
+                - fromrepo: mycustomrepo
+                - skip_verify: True
+                - skip_suggestions: True
+                - version: 2.0.6~ubuntu3
+                - refresh: True
+                - cache_valid_time: 300
+                - allow_updates: True
+                - hold: False
+
+        In this case, a refresh will not take place for 5 minutes since the last
+        ``apt-get update`` was executed on the system.
+
+        .. note::
+
+            This parameter is available only on Debian based distributions and
+            has no effect on the rest.
 
     :param str fromrepo:
         Specify a repository from which to install
@@ -1164,8 +1198,24 @@ def installed(
     if not isinstance(version, six.string_types) and version is not None:
         version = str(version)
 
+    was_refreshed = False
+
     if version is not None and version == 'latest':
-        version = __salt__['pkg.latest_version'](name, **kwargs)
+        try:
+            version = __salt__['pkg.latest_version'](name,
+                                                     fromrepo=fromrepo,
+                                                     refresh=refresh)
+        except CommandExecutionError as exc:
+            return {'name': name,
+                    'changes': {},
+                    'result': False,
+                    'comment': 'An error was encountered while checking the '
+                               'newest available version of package(s): {0}'
+                               .format(exc)}
+
+        was_refreshed = refresh
+        refresh = False
+
         # If version is empty, it means the latest version is installed
         # so we grab that version to avoid passing an empty string
         if not version:
@@ -1178,6 +1228,13 @@ def installed(
                         'comment': exc.strerror}
 
     kwargs['allow_updates'] = allow_updates
+
+    # if windows and a refresh
+    # is required, we will have to do a refresh when _find_install_targets
+    # calls pkg.list_pkgs
+    if salt.utils.is_windows():
+        kwargs['refresh'] = refresh
+
     result = _find_install_targets(name, version, pkgs, sources,
                                    fromrepo=fromrepo,
                                    skip_suggestions=skip_suggestions,
@@ -1186,6 +1243,11 @@ def installed(
                                    ignore_epoch=ignore_epoch,
                                    reinstall=reinstall,
                                    **kwargs)
+
+    if salt.utils.is_windows():
+        was_refreshed = was_refreshed or refresh
+        kwargs.pop('refresh')
+        refresh = False
 
     try:
         (desired, targets, to_unpurge,
@@ -1333,9 +1395,6 @@ def installed(
                                               normalize=normalize,
                                               update_holds=update_holds,
                                               **kwargs)
-
-            if os.path.isfile(rtag) and refresh:
-                os.remove(rtag)
         except CommandExecutionError as exc:
             ret = {'name': name, 'result': False}
             if exc.info:
@@ -1349,6 +1408,8 @@ def installed(
             if warnings:
                 ret['comment'] += '\n\n' + '. '.join(warnings) + '.'
             return ret
+
+        was_refreshed = was_refreshed or refresh
 
         if isinstance(pkg_ret, dict):
             changes['installed'].update(pkg_ret)
@@ -1400,6 +1461,9 @@ def installed(
                                              and hold_ret[x]['result']]
                         failed_hold = [hold_ret[x] for x in hold_ret
                                        if not hold_ret[x]['result']]
+
+    if os.path.isfile(rtag) and was_refreshed:
+        os.remove(rtag)
 
     if to_unpurge:
         changes['purge_desired'] = __salt__['lowpkg.unpurge'](*to_unpurge)
@@ -1629,6 +1693,31 @@ def latest(
         will be performed for ``pkg`` states which do not explicitly set
         ``refresh`` to ``True``. This prevents needless additional refreshes
         from slowing down the Salt run.
+
+    :param str cache_valid_time:
+
+        .. versionadded:: Carbon
+
+        This parameter sets the value in seconds after which the cache is
+        marked as invalid, and a cache update is necessary. This overwrites
+        the ``refresh`` parameter's default behavior.
+
+        Example:
+
+        .. code-block:: yaml
+
+            httpd:
+              pkg.latest:
+                - refresh: True
+                - cache_valid_time: 300
+
+        In this case, a refresh will not take place for 5 minutes since the last
+        ``apt-get update`` was executed on the system.
+
+        .. note::
+
+            This parameter is available only on Debian based distributions and
+            has no effect on the rest.
 
 
     Multiple Package Installation Options:
@@ -2232,6 +2321,19 @@ def uptodate(name, refresh=False, **kwargs):
 
     refresh
         refresh the package database before checking for new upgrades
+
+    :param str cache_valid_time:
+        This parameter sets the value in seconds after which cache marked as invalid,
+        and cache update is necessary. This overwrite ``refresh`` parameter
+        default behavior.
+
+        In this case cache_valid_time is set, refresh will not take place for
+        amount in seconds since last ``apt-get update`` executed on the system.
+
+        .. note::
+
+            This parameter available only on Debian based distributions, and
+            have no effect on the rest.
 
     kwargs
         Any keyword arguments to pass through to ``pkg.upgrade``.

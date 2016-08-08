@@ -967,7 +967,7 @@ class LocalClient(object):
             # re-do the ping
             if time.time() > timeout_at and minions_running:
                 # since this is a new ping, no one has responded yet
-                jinfo = self.gather_job_info(jid, tgt, tgt_type, **kwargs)
+                jinfo = self.gather_job_info(jid, list(minions - found), 'list', **kwargs)
                 minions_running = False
                 # if we weren't assigned any jid that means the master thinks
                 # we have nothing to send
@@ -1309,7 +1309,12 @@ class LocalClient(object):
                 if min_ret.get('failed') is True:
                     if connected_minions is None:
                         connected_minions = salt.utils.minions.CkMinions(self.opts).connected_ids()
-                    if connected_minions and id_ not in connected_minions:
+                    minion_cache = os.path.join(self.opts['cachedir'], 'minions', id_, 'data.p')
+                    if self.opts['minion_data_cache'] \
+                            and os.path.exists(minion_cache) \
+                            and connected_minions \
+                            and id_ not in connected_minions:
+
                         yield {id_: {'out': 'no_return',
                                      'ret': 'Minion did not return. [Not connected]'}}
                     else:

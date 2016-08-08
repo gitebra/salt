@@ -411,6 +411,31 @@ def get_specific_user():
     return user
 
 
+def get_master_key(key_user, opts, skip_perm_errors=False):
+    if key_user == 'root':
+        if opts.get('user', 'root') != 'root':
+            key_user = opts.get('user', 'root')
+    if key_user.startswith('sudo_'):
+        key_user = opts.get('user', 'root')
+    if salt.utils.is_windows():
+        # The username may contain '\' if it is in Windows
+        # 'DOMAIN\username' format. Fix this for the keyfile path.
+        key_user = key_user.replace('\\', '_')
+    keyfile = os.path.join(opts['cachedir'],
+                           '.{0}_key'.format(key_user))
+    # Make sure all key parent directories are accessible
+    salt.utils.verify.check_path_traversal(opts['cachedir'],
+                                           key_user,
+                                           skip_perm_errors)
+
+    try:
+        with salt.utils.fopen(keyfile, 'r') as key:
+            return key.read()
+    except (OSError, IOError):
+        # Fall back to eauth
+        return ''
+
+
 def reinit_crypto():
     '''
     When a fork arrises, pycrypto needs to reinit
@@ -974,7 +999,7 @@ def format_call(fun,
 
     aspec = salt.utils.args.get_function_argspec(fun)
 
-    arg_data = arg_lookup(fun)
+    arg_data = arg_lookup(fun, aspec)
     args = arg_data['args']
     kwargs = arg_data['kwargs']
 
@@ -1082,13 +1107,14 @@ def format_call(fun,
     return ret
 
 
-def arg_lookup(fun):
+def arg_lookup(fun, aspec=None):
     '''
     Return a dict containing the arguments and default arguments to the
     function.
     '''
     ret = {'kwargs': {}}
-    aspec = salt.utils.args.get_function_argspec(fun)
+    if aspec is None:
+        aspec = salt.utils.args.get_function_argspec(fun)
     if aspec.defaults:
         ret['kwargs'] = dict(zip(aspec.args[::-1], aspec.defaults[::-1]))
     ret['args'] = [arg for arg in aspec.args if arg not in ret['kwargs']]
@@ -2459,18 +2485,8 @@ def argspec_report(functions, module=''):
     # TODO: cp.get_file will also match cp.get_file_str. this is the
     # same logic as sys.doc, and it is not working as expected, see
     # issue #3614
-    _use_fnmatch = False
     if '*' in module:
-        target_mod = module
-        _use_fnmatch = True
-    elif module:
-        # allow both "sys" and "sys." to match sys, without also matching
-        # sysctl
-        target_module = module + '.' if not module.endswith('.') else module
-    else:
-        target_module = ''
-    if _use_fnmatch:
-        for fun in fnmatch.filter(functions, target_mod):
+        for fun in fnmatch.filter(functions, module):
             try:
                 aspec = salt.utils.args.get_function_argspec(functions[fun])
             except TypeError:
@@ -2486,8 +2502,12 @@ def argspec_report(functions, module=''):
             ret[fun]['kwargs'] = True if kwargs else None
 
     else:
+        # allow both "sys" and "sys." to match sys, without also matching
+        # sysctl
+        moduledot = module + '.' if module and not module.endswith('.') else module
+
         for fun in functions:
-            if fun == module or fun.startswith(target_module):
+            if fun == module or fun.startswith(moduledot):
                 try:
                     aspec = salt.utils.args.get_function_argspec(functions[fun])
                 except TypeError:

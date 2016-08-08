@@ -157,6 +157,8 @@ class Maintenance(SignalHandlingMultiprocessingProcess):
         self.loop_interval = int(self.opts['loop_interval'])
         # Track key rotation intervals
         self.rotate = int(time.time())
+        # A serializer for general maint operations
+        self.serial = salt.payload.Serial(self.opts)
 
     # __setstate__ and __getstate__ are only used on Windows.
     # We do this so that __init__ will be invoked on Windows in the child
@@ -237,6 +239,7 @@ class Maintenance(SignalHandlingMultiprocessingProcess):
             self.handle_search(now, last)
             self.handle_git_pillar()
             self.handle_schedule()
+            self.handle_key_cache()
             self.handle_presence(old_present)
             self.handle_key_rotate(now)
             salt.daemons.masterapi.fileserver_update(self.fileserver)
@@ -251,6 +254,27 @@ class Maintenance(SignalHandlingMultiprocessingProcess):
         if self.opts.get('search'):
             if now - last >= self.opts['search_index_interval']:
                 self.search.index()
+
+    def handle_key_cache(self):
+        '''
+        Evaluate accepted keys and create a msgpack file
+        which contains a list
+        '''
+        if self.opts['key_cache'] == 'sched':
+            keys = []
+            #TODO DRY from CKMinions
+            if self.opts['transport'] in ('zeromq', 'tcp'):
+                acc = 'minions'
+            else:
+                acc = 'accepted'
+
+            for fn_ in os.listdir(os.path.join(self.opts['pki_dir'], acc)):
+                if not fn_.startswith('.') and os.path.isfile(os.path.join(self.opts['pki_dir'], acc, fn_)):
+                    keys.append(fn_)
+            log.debug('Writing master key cache')
+            # Write a temporary file securely
+            with salt.utils.atomicfile.atomic_open(os.path.join(self.opts['pki_dir'], acc, '.key_cache')) as cache_file:
+                self.serial.dump(keys, cache_file)
 
     def handle_key_rotate(self, now):
         '''
@@ -961,7 +985,13 @@ class AESFuncs(object):
 
         try:
             with salt.utils.fopen(pub_path, 'r') as fp_:
-                pub = RSA.importKey(fp_.read())
+                minion_pub = fp_.read()
+                pub = RSA.importKey(minion_pub)
+        except (IOError, OSError):
+            log.warning('Salt minion claiming to be {0} attempted to communicate '
+                    'with master but key could not be read and verification was '
+                    'denied.'.format(id_))
+            return False
         except (ValueError, IndexError, TypeError) as err:
             log.error('Unable to load public key "{0}": {1}'
                       .format(pub_path, err))
@@ -1723,44 +1753,58 @@ class ClearFuncs(object):
                 return auth_error
             else:
                 token = self.loadauth.get_tok(clear_load.pop('token'))
+                username = token['name']
+        elif 'eauth' in clear_load:
             try:
-                fun = clear_load.pop('fun')
-                runner_client = salt.runner.RunnerClient(self.opts)
-                return runner_client.async(
-                    fun,
-                    clear_load.get('kwarg', {}),
-                    token['name'])
+                eauth_error = self.process_eauth(clear_load, 'runner')
+                if eauth_error:
+                    return eauth_error
+                # No error occurred, consume the password from the clear_load if
+                # passed
+                username = clear_load.pop('username', 'UNKNOWN')
+                clear_load.pop('password', None)
+
             except Exception as exc:
-                log.error('Exception occurred while '
-                          'introspecting {0}: {1}'.format(fun, exc))
+                log.error(
+                    'Exception occurred in the runner system: {0}'.format(exc)
+                )
                 return dict(error=dict(name=exc.__class__.__name__,
                                        args=exc.args,
                                        message=str(exc)))
+        else:
+            if 'key' not in clear_load:
+                msg = 'Authentication failure of type "user" occurred'
+                log.warning(msg)
+                return dict(error=dict(name='UserAuthenticationError',
+                                       message=msg))
+            key = clear_load.pop('key')
 
+            if 'user' in clear_load:
+                username = clear_load['user']
+                auth_user = salt.auth.AuthUser(username)
+                if auth_user.is_sudo:
+                    username = self.opts.get('user', 'root')
+            else:
+                username = salt.utils.get_user()
+
+            if username not in self.key and \
+                    key != self.key[username] and \
+                    key != self.key['root']:
+                msg = 'Authentication failure of type "user" occurred for user {0}'.format(username)
+                log.warning(msg)
+                return dict(error=dict(name='UserAuthenticationError',
+                                       message=msg))
+
+        # Authorized. Do the job!
         try:
-            eauth_error = self.process_eauth(clear_load, 'runner')
-            if eauth_error:
-                return eauth_error
-            # No error occurred, consume the password from the clear_load if
-            # passed
-            clear_load.pop('password', None)
-            try:
-                fun = clear_load.pop('fun')
-                runner_client = salt.runner.RunnerClient(self.opts)
-                return runner_client.async(fun,
-                                           clear_load.get('kwarg', {}),
-                                           clear_load.pop('username', 'UNKNOWN'))
-            except Exception as exc:
-                log.error('Exception occurred while '
-                          'introspecting {0}: {1}'.format(fun, exc))
-                return dict(error=dict(name=exc.__class__.__name__,
-                                       args=exc.args,
-                                       message=str(exc)))
-
+            fun = clear_load.pop('fun')
+            runner_client = salt.runner.RunnerClient(self.opts)
+            return runner_client.async(fun,
+                                       clear_load.get('kwarg', {}),
+                                       username)
         except Exception as exc:
-            log.error(
-                'Exception occurred in the runner system: {0}'.format(exc)
-            )
+            log.error('Exception occurred while '
+                      'introspecting {0}: {1}'.format(fun, exc))
             return dict(error=dict(name=exc.__class__.__name__,
                                    args=exc.args,
                                    message=str(exc)))
@@ -1770,6 +1814,7 @@ class ClearFuncs(object):
         Send a master control function back to the wheel system
         '''
         # All wheel ops pass through eauth
+        username = None
         if 'token' in clear_load:
             auth_error = self.process_token(clear_load['token'],
                                             clear_load['fun'],
@@ -1778,77 +1823,77 @@ class ClearFuncs(object):
                 return auth_error
             else:
                 token = self.loadauth.get_tok(clear_load.pop('token'))
-
-            jid = salt.utils.jid.gen_jid()
-            fun = clear_load.pop('fun')
-            tag = tagify(jid, prefix='wheel')
-            data = {'fun': "wheel.{0}".format(fun),
-                    'jid': jid,
-                    'tag': tag,
-                    'user': token['name']}
+            username = token['name']
+        elif 'eauth' in clear_load:
             try:
-                self.event.fire_event(data, tagify([jid, 'new'], 'wheel'))
-                ret = self.wheel_.call_func(fun, **clear_load)
-                data['return'] = ret
-                data['success'] = True
-                self.event.fire_event(data, tagify([jid, 'ret'], 'wheel'))
-                return {'tag': tag,
-                        'data': data}
-            except Exception as exc:
-                log.error(exc)
-                log.error('Exception occurred while '
-                          'introspecting {0}: {1}'.format(fun, exc))
-                data['return'] = 'Exception occurred in wheel {0}: {1}: {2}'.format(
-                    fun,
-                    exc.__class__.__name__,
-                    exc,
-                    )
-                data['success'] = False
-                self.event.fire_event(data, tagify([jid, 'ret'], 'wheel'))
-                return {'tag': tag,
-                        'data': data}
-        try:
-            eauth_error = self.process_eauth(clear_load, 'wheel')
-            if eauth_error:
-                return eauth_error
+                eauth_error = self.process_eauth(clear_load, 'wheel')
+                if eauth_error:
+                    return eauth_error
 
-            # No error occurred, consume the password from the clear_load if
-            # passed
-            clear_load.pop('password', None)
-            jid = salt.utils.jid.gen_jid()
-            fun = clear_load.pop('fun')
-            tag = tagify(jid, prefix='wheel')
-            data = {'fun': "wheel.{0}".format(fun),
-                    'jid': jid,
-                    'tag': tag,
-                    'user': clear_load.pop('username', 'UNKNOWN')}
-            try:
-                self.event.fire_event(data, tagify([jid, 'new'], 'wheel'))
-                ret = self.wheel_.call_func(fun, **clear_load)
-                data['return'] = ret
-                data['success'] = True
-                self.event.fire_event(data, tagify([jid, 'ret'], 'wheel'))
-                return {'tag': tag,
-                        'data': data}
+                # No error occurred, consume the password from the clear_load if
+                # passed
+                clear_load.pop('password', None)
+                username = clear_load.pop('username', 'UNKNOWN')
             except Exception as exc:
-                log.error('Exception occurred while '
-                          'introspecting {0}: {1}'.format(fun, exc))
-                data['return'] = 'Exception occurred in wheel {0}: {1}: {2}'.format(
-                                 fun,
-                                 exc.__class__.__name__,
-                                 exc,
+                log.error(
+                    'Exception occurred in the wheel system: {0}'.format(exc)
                 )
-                self.event.fire_event(data, tagify([jid, 'ret'], 'wheel'))
-                return {'tag': tag,
-                        'data': data}
+                return dict(error=dict(name=exc.__class__.__name__,
+                                       args=exc.args,
+                                       message=str(exc)))
+        else:
+            if 'key' not in clear_load:
+                msg = 'Authentication failure of type "user" occurred'
+                log.warning(msg)
+                return dict(error=dict(name='UserAuthenticationError',
+                                       message=msg))
+            key = clear_load.pop('key')
 
+            if 'user' in clear_load:
+                username = clear_load['user']
+                auth_user = salt.auth.AuthUser(username)
+                if auth_user.is_sudo:
+                    username = self.opts.get('user', 'root')
+            else:
+                username = salt.utils.get_user()
+
+            if username not in self.key and \
+                    key != self.key[username] and \
+                    key != self.key['root']:
+                msg = 'Authentication failure of type "user" occurred for user {0}'.format(username)
+                log.warning(msg)
+                return dict(error=dict(name='UserAuthenticationError',
+                                       message=msg))
+
+        # Authorized. Do the job!
+        try:
+            jid = salt.utils.jid.gen_jid()
+            fun = clear_load.pop('fun')
+            tag = tagify(jid, prefix='wheel')
+            data = {'fun': "wheel.{0}".format(fun),
+                    'jid': jid,
+                    'tag': tag,
+                    'user': username}
+
+            self.event.fire_event(data, tagify([jid, 'new'], 'wheel'))
+            ret = self.wheel_.call_func(fun, **clear_load)
+            data['return'] = ret
+            data['success'] = True
+            self.event.fire_event(data, tagify([jid, 'ret'], 'wheel'))
+            return {'tag': tag,
+                    'data': data}
         except Exception as exc:
-            log.error(
-                'Exception occurred in the wheel system: {0}'.format(exc)
+            log.error('Exception occurred while '
+                      'introspecting {0}: {1}'.format(fun, exc))
+            data['return'] = 'Exception occurred in wheel {0}: {1}: {2}'.format(
+                             fun,
+                             exc.__class__.__name__,
+                             exc,
             )
-            return dict(error=dict(name=exc.__class__.__name__,
-                                   args=exc.args,
-                                   message=str(exc)))
+            data['success'] = False
+            self.event.fire_event(data, tagify([jid, 'ret'], 'wheel'))
+            return {'tag': tag,
+                    'data': data}
 
     def mk_token(self, clear_load):
         '''

@@ -914,7 +914,7 @@ def instance_present(name, instance_name=None, instance_id=None, image_id=None,
 
 def instance_absent(name, instance_name=None, instance_id=None,
                     release_eip=False, region=None, key=None, keyid=None,
-                    profile=None):
+                    profile=None, filters=None):
     '''
     Ensure an EC2 instance does not exist (is stopped and removed).
 
@@ -935,8 +935,17 @@ def instance_absent(name, instance_name=None, instance_id=None,
     profile
         (variable) - A dict with region, key and keyid, or a pillar key (string)
         that contains a dict with region, key and keyid.
+    filters
+        (dict) - A dict of additional filters to use in matching the instance to
+        delete.
 
-    .. versionadded:: 2016.3.0
+    YAML example fragment:
+
+    .. code-block:: yaml
+        - filters:
+            vpc-id: vpc-abcdef12
+
+    .. versionupdated:: Carbon
     '''
     ### TODO - Implement 'force' option??  Would automagically turn off
     ###        'disableApiTermination', as needed, before trying to delete.
@@ -951,7 +960,8 @@ def instance_absent(name, instance_name=None, instance_id=None,
         try:
             instance_id = __salt__['boto_ec2.get_id'](name=instance_name if instance_name else name,
                                                       region=region, key=key, keyid=keyid,
-                                                      profile=profile, in_states=running_states)
+                                                      profile=profile, in_states=running_states,
+                                                      filters=filters)
         except CommandExecutionError as e:
             ret['result'] = None
             ret['comment'] = ("Couldn't determine current status of instance "
@@ -960,7 +970,7 @@ def instance_absent(name, instance_name=None, instance_id=None,
 
     instances = __salt__['boto_ec2.find_instances'](instance_id=instance_id, region=region,
                                                     key=key, keyid=keyid, profile=profile,
-                                                    return_objs=True)
+                                                    return_objs=True, filters=filters)
     if not len(instances):
         ret['result'] = True
         ret['comment'] = 'Instance {0} is already gone.'.format(instance_id)
@@ -1113,5 +1123,87 @@ def volume_absent(name, volume_name=None, volume_id=None, instance_name=None,
         ret['changes'] = {'old': {'volume_id': vol}, 'new': {'volume_id': None}}
     else:
         ret['comment'] = 'Error deleting volume {0}.'.format(vol)
+        ret['result'] = False
+    return ret
+
+
+def volumes_tagged(name, tag_maps, authoritative=False, region=None, key=None,
+                   keyid=None, profile=None):
+    '''
+    Ensure EC2 volume(s) matching the given filters have the defined tags.
+
+    name
+        State definition name.
+
+    tag_maps
+        List of dicts of filters and tags, where 'filters' is a dict suitable for passing
+        to the 'filters' argument of boto_ec2.get_all_volumes(), and 'tags' is a dict of
+        tags to be set on volumes as matched by the given filters.  The filter syntax is
+        extended to permit passing either a list of volume_ids or an instance_name (with
+        instance_name being the Name tag of the instance to which the desired volumes are
+        mapped).  Each mapping in the list is applied separately, so multiple sets of
+        volumes can be all tagged differently with one call to this function.
+
+    YAML example fragment:
+
+    .. code-block:: yaml
+        - filters:
+            attachment.instance_id: i-abcdef12
+          tags:
+            Name: dev-int-abcdef12.aws-foo.com
+        - filters:
+            attachment.device: /dev/sdf
+          tags:
+            ManagedSnapshots: true
+            BillingGroup: bubba.hotep@aws-foo.com
+        - filters:
+            instance_name: prd-foo-01.aws-foo.com
+          tags:
+            Name: prd-foo-01.aws-foo.com
+            BillingGroup: infra-team@aws-foo.com
+        - filters:
+            volume_ids: [ vol-12345689, vol-abcdef12 ]
+          tags:
+            BillingGroup: infra-team@aws-foo.com
+
+    authoritative
+        Should un-declared tags currently set on matched volumes be deleted?  Boolean.
+
+    region
+        Region to connect to.
+
+    key
+        Secret key to be used.
+
+    keyid
+        Access key to be used.
+
+    profile
+        A dict with region, key and keyid, or a pillar key (string)
+        that contains a dict with region, key and keyid.
+
+    .. versionadded:: Carbon
+    '''
+
+    ret = {'name': name,
+           'result': True,
+           'comment': '',
+           'changes': {}
+          }
+    args = {'tag_maps': tag_maps, 'authoritative': authoritative,
+            'region': region, 'key': key, 'keyid': keyid, 'profile': profile}
+
+    if __opts__['test']:
+        args['dry_run'] = True
+        r = __salt__['boto_ec2.set_volumes_tags'](**args)
+        if r.get('changes'):
+            ret['comment'] = 'The following changes would be applied: {0}'.format(r)
+        return ret
+    r = __salt__['boto_ec2.set_volumes_tags'](**args)
+    if r['success'] is True:
+        ret['comment'] = 'Tags applied.'
+        ret['changes'] = r['changes']
+    else:
+        ret['comment'] = 'Error updating requested volume tags.'
         ret['result'] = False
     return ret

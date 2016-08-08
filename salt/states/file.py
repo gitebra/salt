@@ -1117,6 +1117,7 @@ def managed(name,
             show_changes=True,
             create=True,
             contents=None,
+            tmp_ext='',
             contents_pillar=None,
             contents_grains=None,
             contents_newline=True,
@@ -1465,6 +1466,27 @@ def managed(name,
         **NOTE**: This ``check_cmd`` functions differently than the requisite
         ``check_cmd``.
 
+    tmp_ext
+        provide extention for temp file created by check_cmd
+        useful for checkers dependant on config file extention
+        for example it should be useful for init-checkconf upstart config checker
+        by default it is empty
+        .. code-block:: yaml
+
+            /etc/init/test.conf:
+              file.managed:
+                - user: root
+                - group: root
+                - mode: 0440
+                - tmp_ext: '.conf'
+                - contents:
+                  - 'description "Salt Minion"''
+                  - 'start on started mountall'
+                  - 'stop on shutdown'
+                  - 'respawn'
+                  - 'exec salt-minion'
+                - check_cmd: init-checkconf -f
+
     skip_verify : False
         If ``True``, hash verification of remote file sources (``http://``,
         ``https://``, ``ftp://``) will be skipped, and the ``source_hash``
@@ -1514,10 +1536,10 @@ def managed(name,
             '\'source\' cannot be used in combination with \'contents\', '
             '\'contents_pillar\', or \'contents_grains\''
         )
-    elif (mode or keep_mode) and contents_count > 0:
+    elif keep_mode and contents_count > 0:
         return _error(
             ret,
-            'Mode management cannot be used in combination with \'contents\', '
+            'Mode preservation cannot be used in combination with \'contents\', '
             '\'contents_pillar\', or \'contents_grains\''
         )
     elif contents_count > 1:
@@ -1715,7 +1737,9 @@ def managed(name,
 
     try:
         if __opts__['test']:
-            if ret['pchanges']:
+            if isinstance(ret['pchanges'], tuple):
+                ret['result'], ret['comment'] = ret['pchanges']
+            elif ret['pchanges']:
                 ret['result'] = None
                 ret['comment'] = 'The file {0} is set to be changed'.format(name)
                 if show_changes and 'diff' in ret['pchanges']:
@@ -1763,7 +1787,7 @@ def managed(name,
     tmp_filename = None
 
     if check_cmd:
-        tmp_filename = salt.utils.mkstemp()
+        tmp_filename = salt.utils.mkstemp()+tmp_ext
 
         # if exists copy existing file to tmp to compare
         if __salt__['file.file_exists'](name):

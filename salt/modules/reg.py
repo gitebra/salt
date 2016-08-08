@@ -165,8 +165,8 @@ class Registry(object):  # pylint: disable=R0903
         }
 
         self.registry_32 = {
-            True: _winreg.KEY_ALL_ACCESS | _winreg.KEY_WOW64_32KEY,
-            False: _winreg.KEY_ALL_ACCESS,
+            True: _winreg.KEY_READ | _winreg.KEY_WOW64_32KEY,
+            False: _winreg.KEY_READ,
             }
 
     def __getattr__(self, k):
@@ -212,6 +212,14 @@ def _key_exists(hive, key, use_32bit_registry=False):
 def broadcast_change():
     '''
     Refresh the windows environment.
+
+    Returns (bool): True if successful, otherwise False
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt '*' reg.broadcast_change
     '''
     # https://msdn.microsoft.com/en-us/library/windows/desktop/ms644952(v=vs.85).aspx
     _, res = SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0,
@@ -613,7 +621,7 @@ def set_value(hive,
     registry = Registry()
     hkey = registry.hkeys[local_hive]
     vtype_value = registry.vtype[local_vtype]
-    access_mask = registry.registry_32[use_32bit_registry]
+    access_mask = registry.registry_32[use_32bit_registry] | _winreg.KEY_ALL_ACCESS
     if volatile:
         create_options = registry.opttype['REG_OPTION_VOLATILE']
     else:
@@ -674,7 +682,7 @@ def delete_key_recursive(hive, key, use_32bit_registry=False):
     registry = Registry()
     hkey = registry.hkeys[local_hive]
     key_path = local_key
-    access_mask = registry.registry_32[use_32bit_registry]
+    access_mask = registry.registry_32[use_32bit_registry] | _winreg.KEY_ALL_ACCESS
 
     if not _key_exists(local_hive, local_key, use_32bit_registry):
         return False
@@ -771,7 +779,7 @@ def delete_value(hive, key, vname=None, use_32bit_registry=False):
 
     registry = Registry()
     hkey = registry.hkeys[local_hive]
-    access_mask = registry.registry_32[use_32bit_registry]
+    access_mask = registry.registry_32[use_32bit_registry] | _winreg.KEY_ALL_ACCESS
 
     try:
         handle = _winreg.OpenKey(hkey, local_key, 0, access_mask)

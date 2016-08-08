@@ -351,17 +351,24 @@ def eval_master_func(opts):
     '''
     if '__master_func_evaluated' not in opts:
         # split module and function and try loading the module
-        mod, fun = opts['master'].split('.')
+        mod_fun = opts['master']
+        mod, fun = mod_fun.split('.')
         try:
             master_mod = salt.loader.raw_mod(opts, mod, fun)
+            if not master_mod:
+                raise KeyError
             # we take whatever the module returns as master address
-            opts['master'] = master_mod[mod + '.' + fun]()
+            opts['master'] = master_mod[mod_fun]()
+            if not isinstance(opts['master'], str):
+                raise TypeError
             opts['__master_func_evaluated'] = True
-        except TypeError:
-            log.error("Failed to evaluate master address from module '{0}'".format(
-                      opts['master']))
+        except KeyError:
+            log.error('Failed to load module {0}'.format(mod_fun))
             sys.exit(salt.defaults.exitcodes.EX_GENERIC)
-        log.info('Evaluated master from module: {0}'.format(master_mod))
+        except TypeError:
+            log.error('{0} returned from {1} is not a string'.format(opts['master'], mod_fun))
+            sys.exit(salt.defaults.exitcodes.EX_GENERIC)
+        log.info('Evaluated master from module: {0}'.format(mod_fun))
 
 
 class MinionBase(object):
@@ -405,7 +412,8 @@ class MinionBase(object):
                     opts,
                     timeout=60,
                     safe=True,
-                    failed=False):
+                    failed=False,
+                    failback=False):
         '''
         Evaluates and returns a tuple of the current master address and the pub_channel.
 
@@ -460,16 +468,20 @@ class MinionBase(object):
                 # because a master connection loss was detected. remove
                 # the possibly failed master from the list of masters.
                 elif failed:
-                    log.info('Moving possibly failed master {0} to the end of'
-                             ' the list of masters'.format(opts['master']))
-                    if opts['master'] in opts['master_list']:
-                        # create new list of master with the possibly failed
-                        # one moved to the end
-                        failed_master = opts['master']
-                        opts['master'] = [x for x in opts['master_list'] if opts['master'] != x]
-                        opts['master'].append(failed_master)
-                    else:
+                    if failback:
+                        # failback list of masters to original config
                         opts['master'] = opts['master_list']
+                    else:
+                        log.info('Moving possibly failed master {0} to the end of'
+                                 ' the list of masters'.format(opts['master']))
+                        if opts['master'] in opts['local_masters']:
+                            # create new list of master with the possibly failed
+                            # one moved to the end
+                            failed_master = opts['master']
+                            opts['master'] = [x for x in opts['local_masters'] if opts['master'] != x]
+                            opts['master'].append(failed_master)
+                        else:
+                            opts['master'] = opts['master_list']
                 else:
                     msg = ('master_type set to \'failover\' but \'master\' '
                            'is not of type list but of type '
@@ -504,7 +516,7 @@ class MinionBase(object):
         if isinstance(opts['master'], list):
             conn = False
             # shuffle the masters and then loop through them
-            local_masters = copy.copy(opts['master'])
+            opts['local_masters'] = copy.copy(opts['master'])
             last_exc = None
 
             while True:
@@ -517,16 +529,17 @@ class MinionBase(object):
                     log.debug('Connecting to master. Attempt {0} '
                               '(infinite attempts)'.format(attempts)
                     )
-                for master in local_masters:
+                for master in opts['local_masters']:
                     opts['master'] = master
                     opts.update(prep_ip_port(opts))
                     opts.update(resolve_dns(opts))
-                    self.opts = opts
 
                     # on first run, update self.opts with the whole master list
                     # to enable a minion to re-use old masters if they get fixed
                     if 'master_list' not in opts:
-                        opts['master_list'] = local_masters
+                        opts['master_list'] = copy.copy(opts['local_masters'])
+
+                    self.opts = opts
 
                     try:
                         pub_channel = salt.transport.client.AsyncPubChannel.factory(opts, **factory_kwargs)
@@ -722,6 +735,7 @@ class MinionManager(MinionBase):
         self.auth_wait = self.opts['acceptance_wait_time']
         self.max_auth_wait = self.opts['acceptance_wait_time_max']
         self.minions = []
+        self.jid_queue = []
 
         if HAS_ZMQ:
             zmq.eventloop.ioloop.install()
@@ -759,6 +773,7 @@ class MinionManager(MinionBase):
                             False,
                             io_loop=self.io_loop,
                             loaded_base_name='salt.loader.{0}'.format(s_opts['master']),
+                            jid_queue=self.jid_queue,
                             )
             self.minions.append(minion)
             self.io_loop.spawn_callback(self._connect_minion, minion)
@@ -826,7 +841,7 @@ class Minion(MinionBase):
     This class instantiates a minion, runs connections for a minion,
     and loads all of the functions into the minion
     '''
-    def __init__(self, opts, timeout=60, safe=True, loaded_base_name=None, io_loop=None):  # pylint: disable=W0231
+    def __init__(self, opts, timeout=60, safe=True, loaded_base_name=None, io_loop=None, jid_queue=None):  # pylint: disable=W0231
         '''
         Pass in the options dict
         '''
@@ -843,6 +858,7 @@ class Minion(MinionBase):
         # Flag meaning minion has finished initialization including first connect to the master.
         # True means the Minion is fully functional and ready to handle events.
         self.ready = False
+        self.jid_queue = jid_queue
 
         if io_loop is None:
             if HAS_ZMQ:
@@ -1002,6 +1018,7 @@ class Minion(MinionBase):
                     'seconds': self.opts['master_alive_interval'],
                     'jid_include': True,
                     'maxrunning': 1,
+                    'return_job': False,
                     'kwargs': {'master': self.opts['master'],
                                'connected': True}
                 }
@@ -1016,6 +1033,7 @@ class Minion(MinionBase):
                         'seconds': self.opts['master_failback_interval'],
                         'jid_include': True,
                         'maxrunning': 1,
+                        'return_job': False,
                         'kwargs': {'master': self.opts['master_list'][0]}
                     }
                 }, persist=True)
@@ -1178,6 +1196,16 @@ class Minion(MinionBase):
                 'Executing command {0[fun]} with jid {0[jid]}'.format(data)
             )
         log.debug('Command details {0}'.format(data))
+
+        # Don't duplicate jobs
+        log.debug('Started JIDs: {0}'.format(self.jid_queue))
+        if self.jid_queue is not None:
+            if data['jid'] in self.jid_queue:
+                return
+            else:
+                self.jid_queue.append(data['jid'])
+                if len(self.jid_queue) > self.opts['minion_jid_queue_hwm']:
+                    self.jid_queue.pop(0)
 
         if isinstance(data['fun'], six.string_types):
             if data['fun'] == 'sys.reload_modules':
@@ -1849,6 +1877,7 @@ class Minion(MinionBase):
                        'seconds': self.opts['master_alive_interval'],
                        'jid_include': True,
                        'maxrunning': 1,
+                       'return_job': False,
                        'kwargs': {'master': self.opts['master'],
                                   'connected': False}
                     }
@@ -1873,7 +1902,8 @@ class Minion(MinionBase):
                     try:
                         master, self.pub_channel = yield self.eval_master(
                                                             opts=self.opts,
-                                                            failed=True)
+                                                            failed=True,
+                                                            failback=package.startswith('__master_failback'))
                     except SaltClientError:
                         pass
 
@@ -1895,6 +1925,7 @@ class Minion(MinionBase):
                                'seconds': self.opts['master_alive_interval'],
                                'jid_include': True,
                                'maxrunning': 1,
+                               'return_job': False,
                                'kwargs': {'master': self.opts['master'],
                                           'connected': True}
                             }
@@ -1908,6 +1939,7 @@ class Minion(MinionBase):
                                        'seconds': self.opts['master_failback_interval'],
                                        'jid_include': True,
                                        'maxrunning': 1,
+                                       'return_job': False,
                                        'kwargs': {'master': self.opts['master_list'][0]}
                                     }
                                     self.schedule.modify_job(name='__master_failback',
@@ -1931,6 +1963,7 @@ class Minion(MinionBase):
                        'seconds': self.opts['master_alive_interval'],
                        'jid_include': True,
                        'maxrunning': 1,
+                       'return_job': False,
                        'kwargs': {'master': self.opts['master'],
                                   'connected': True}
                     }
@@ -2965,6 +2998,7 @@ class ProxyMinion(Minion):
                         'seconds': self.opts['master_alive_interval'],
                         'jid_include': True,
                         'maxrunning': 1,
+                        'return_job': False,
                         'kwargs': {'master': self.opts['master'],
                                    'connected': True}
                     }
@@ -2979,6 +3013,7 @@ class ProxyMinion(Minion):
                         'seconds': self.opts['master_failback_interval'],
                         'jid_include': True,
                         'maxrunning': 1,
+                        'return_job': False,
                         'kwargs': {'master': self.opts['master_list'][0]}
                     }
                 }, persist=True)

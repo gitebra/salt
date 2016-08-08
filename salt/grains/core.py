@@ -62,7 +62,9 @@ if salt.utils.is_windows():
         import wmi  # pylint: disable=import-error
         import salt.utils.winapi
         import win32api
+        import salt.modules.reg
         HAS_WMI = True
+        __salt__['reg.read_value'] = salt.modules.reg.read_value
     except ImportError:
         log.exception(
             'Unable to import Python wmi module, some core grains '
@@ -87,7 +89,10 @@ def _windows_cpudata():
             grains['num_cpus'] = int(os.environ['NUMBER_OF_PROCESSORS'])
         except ValueError:
             grains['num_cpus'] = 1
-    grains['cpu_model'] = platform.processor()
+    grains['cpu_model'] = __salt__['reg.read_value'](
+                       "HKEY_LOCAL_MACHINE",
+                       "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                       "ProcessorNameString").get('vdata')
     return grains
 
 
@@ -392,7 +397,8 @@ def _memdata(osdata):
                     if not len(comps) > 1:
                         continue
                     if comps[0].strip() == 'MemTotal':
-                        grains['mem_total'] = int(comps[1].split()[0]) / 1024
+                        # Use floor division to force output to be an integer
+                        grains['mem_total'] = int(comps[1].split()[0]) // 1024
     elif osdata['kernel'] in ('FreeBSD', 'OpenBSD', 'NetBSD', 'Darwin'):
         sysctl = salt.utils.which('sysctl')
         if sysctl:

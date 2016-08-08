@@ -64,7 +64,8 @@ class WheelClient(salt.client.mixins.SyncClientMixin,
                                                       ':' + str(self.opts['ret_port'])
         channel = salt.transport.Channel.factory(self.opts,
                                                  crypt='clear',
-                                                 master_uri=master_uri)
+                                                 master_uri=master_uri,
+                                                 usage='master_call')
         ret = channel.send(load)
         if isinstance(ret, collections.Mapping):
             if 'error' in ret:
@@ -114,7 +115,7 @@ class WheelClient(salt.client.mixins.SyncClientMixin,
         fun = low.pop('fun')
         return self.async(fun, low)
 
-    def cmd(self, fun, arg=None, pub_data=None, kwarg=None):
+    def cmd(self, fun, arg=None, pub_data=None, kwarg=None, full_return=False):
         '''
         Execute a function
 
@@ -123,7 +124,11 @@ class WheelClient(salt.client.mixins.SyncClientMixin,
             >>> wheel.cmd('key.finger', ['jerry'])
             {'minions': {'jerry': '5d:f6:79:43:5e:d4:42:3f:57:b8:45:a8:7e:a4:6e:ca'}}
         '''
-        return super(WheelClient, self).cmd(fun, arg, pub_data, kwarg)
+        return super(WheelClient, self).cmd(fun,
+                                            arg,
+                                            pub_data,
+                                            kwarg,
+                                            full_return)
 
 
 Wheel = WheelClient  # for backward-compat
