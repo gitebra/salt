@@ -378,7 +378,7 @@ class TestProgram(six.with_metaclass(TestProgramMeta, object)):
         if not verbatim_env:
             env_pypath = env_delta.get('PYTHONPATH', os.environ.get('PYTHONPATH'))
             if not env_pypath:
-                env_pypath = ':'.join(sys.path)
+                env_pypath = sys.path
             else:
                 env_pypath = env_pypath.split(':')
                 for path in sys.path:
@@ -902,8 +902,8 @@ class TestProgramCase(TestCase):
 
         ex_val = getattr(exitcodes, ex_status)
         _message = '' if not message else ' ({0})'.format(message)
-        _stdout = '' if not stdout else '\nstdout: {0}'.format('\nstdout: '.join(stdout))
-        _stderr = '' if not stderr else '\nstderr: {0}'.format('\nstderr: '.join(stderr))
+        _stdout = '' if not stdout else '\nstdout: {0}'.format(stdout)
+        _stderr = '' if not stderr else '\nstderr: {0}'.format(stderr)
         self.assertEqual(
             status,
             ex_val,
