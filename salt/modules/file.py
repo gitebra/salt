@@ -1499,7 +1499,8 @@ def line(path, content, match=None, mode=None, location=None,
     if before is None and after is None and not match:
         match = content
 
-    body = salt.utils.fopen(path, mode='r').read()
+    with salt.utils.fopen(path, mode='r') as fp_:
+        body = fp_.read()
     body_before = hashlib.sha256(salt.utils.to_bytes(body)).hexdigest()
     after = _regex_to_static(body, after)
     before = _regex_to_static(body, before)
@@ -1640,7 +1641,9 @@ def line(path, content, match=None, mode=None, location=None,
 
     if changed:
         if show_changes:
-            changes_diff = ''.join(difflib.unified_diff(salt.utils.fopen(path, 'r').read().splitlines(), body.splitlines()))
+            with salt.utils.fopen(path, 'r') as fp_:
+                path_content = fp_.read().splitlines()
+            changes_diff = ''.join(difflib.unified_diff(path_content, body.splitlines()))
         if __opts__['test'] is False:
             fh_ = None
             try:
@@ -2413,32 +2416,6 @@ def contains_regex(path, regex, lchar=''):
             return False
     except (IOError, OSError):
         return False
-
-
-def contains_regex_multiline(path, regex):
-    '''
-    .. deprecated:: 0.17.0
-       Use :func:`search` instead.
-
-    Return True if the given regular expression matches anything in the text
-    of a given file
-
-    Traverses multiple lines at a time, via the salt BufferedReader (reads in
-    chunks)
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt '*' file.contains_regex_multiline /etc/crontab '^maint'
-    '''
-    salt.utils.warn_until(
-        'Carbon',
-        "file.contains_regex_multiline(path, regex) is deprecated in favor of "
-        "file.search(path, regex, multiline=True)"
-    )
-
-    search(path, regex, multiline=True)
 
 
 def contains_glob(path, glob_expr):

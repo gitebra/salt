@@ -641,7 +641,7 @@ def output_profile(pr, stats_path='/tmp/stats', stop=False, id_=None):
             ficn = os.path.join(stats_path, '{0}.{1}.stats'.format(id_, date))
             if not os.path.exists(ficp):
                 pr.dump_stats(ficp)
-                with open(ficn, 'w') as fic:
+                with fopen(ficn, 'w') as fic:
                     pstats.Stats(pr, stream=fic).sort_stats('cumulative')
             log.info('PROFILING: {0} generated'.format(ficp))
             log.info('PROFILING (cumulative): {0} generated'.format(ficn))
@@ -2482,10 +2482,7 @@ def argspec_report(functions, module=''):
     argspec function signatures
     '''
     ret = {}
-    # TODO: cp.get_file will also match cp.get_file_str. this is the
-    # same logic as sys.doc, and it is not working as expected, see
-    # issue #3614
-    if '*' in module:
+    if '*' in module or '.' in module:
         for fun in fnmatch.filter(functions, module):
             try:
                 aspec = salt.utils.args.get_function_argspec(functions[fun])
@@ -2502,12 +2499,11 @@ def argspec_report(functions, module=''):
             ret[fun]['kwargs'] = True if kwargs else None
 
     else:
-        # allow both "sys" and "sys." to match sys, without also matching
-        # sysctl
-        moduledot = module + '.' if module and not module.endswith('.') else module
+        # "sys" should just match sys without also matching sysctl
+        moduledot = module + '.'
 
         for fun in functions:
-            if fun == module or fun.startswith(moduledot):
+            if fun.startswith(moduledot):
                 try:
                     aspec = salt.utils.args.get_function_argspec(functions[fun])
                 except TypeError:

@@ -292,6 +292,15 @@ Cloud Deprecations
 Execution Module Deprecations
 -----------------------------
 
+- The ``blockdev`` execution module had four functions removed:
+
+  - dump
+  - tune
+  - resize2fs
+  - wipe
+
+  The ``disk`` module should be used instead with the same function names.
+
 - The ``boto_vpc`` execution module had two functions removed,
   ``boto_vpc.associate_new_dhcp_options_to_vpc`` and
   ``boto_vpc.associate_new_network_acl_to_subnet`` in favor of more concise function
@@ -300,6 +309,9 @@ Execution Module Deprecations
 - The ``data`` execution module had ``getval`` and ``getvals`` functions removed
   in favor of one function, ``get``, which combines the functionality of the
   removed functions.
+
+- The ``contains_regex_multiline`` function was removed from the ``file`` execution module.
+  Use ``file.search`` instead.
 
 - ``reg`` execution module
 

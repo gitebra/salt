@@ -84,7 +84,7 @@ def _gather_buffer_space():
         os_data = {'kernel': platform.system()}
         grains = salt.grains.core._memdata(os_data)
         total_mem = grains['mem_total']
-    # Return the higher number between 5% of the system memory and 100MB
+    # Return the higher number between 5% of the system memory and 10MiB
     return max([total_mem * 0.05, 10 << 20])
 
 # For the time being this will be a fixed calculation
@@ -1000,7 +1000,7 @@ DEFAULT_MINION_OPTS = {
     'gitfs_global_lock': True,
     'gitfs_ssl_verify': True,
     'gitfs_saltenv': [],
-    'hash_type': 'md5',
+    'hash_type': 'sha256',
     'disable_modules': [],
     'disable_returners': [],
     'whitelist_modules': [],
@@ -1263,7 +1263,7 @@ DEFAULT_MASTER_OPTS = {
     'fileserver_ignoresymlinks': False,
     'fileserver_limit_traversal': False,
     'max_open_files': 100000,
-    'hash_type': 'md5',
+    'hash_type': 'sha256',
     'conf_file': os.path.join(salt.syspaths.CONFIG_DIR, 'master'),
     'open_mode': False,
     'auto_accept': False,

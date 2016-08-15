@@ -334,7 +334,7 @@ class SSH(object):
         '''
         if not isinstance(ret[host], dict) or self.opts.get('ssh_key_deploy'):
             target = self.targets[host]
-            if 'passwd' in target or self.opts['ssh_passwd']:
+            if target.get('passwd', False) or self.opts['ssh_passwd']:
                 self._key_deploy_run(host, target, False)
             return ret
         if ret[host].get('stderr', '').count('Permission denied'):
@@ -474,6 +474,10 @@ class SSH(object):
                     returned.add(ret['id'])
                     yield {ret['id']: ret['ret']}
             except Exception:
+                # This bare exception is here to catch spurious exceptions
+                # thrown by que.get during healthy operation. Please do not
+                # worry about this bare exception, it is entirely here to
+                # control program flow.
                 pass
             for host in running:
                 if not running[host]['thread'].is_alive():
@@ -869,6 +873,12 @@ class Single(object):
                 minion_opts=self.minion_opts,
                 **self.target)
             opts_pkg = pre_wrapper['test.opts_pkg']()  # pylint: disable=E1102
+            if '_error' in opts_pkg:
+                #Refresh failed
+                retcode = opts_pkg['retcode']
+                ret = json.dumps({'local': opts_pkg})
+                return ret, retcode
+
             opts_pkg['file_roots'] = self.opts['file_roots']
             opts_pkg['pillar_roots'] = self.opts['pillar_roots']
             opts_pkg['ext_pillar'] = self.opts['ext_pillar']
@@ -883,12 +893,6 @@ class Single(object):
             opts_pkg['id'] = self.id
 
             retcode = 0
-
-            if '_error' in opts_pkg:
-                #Refresh failed
-                retcode = opts_pkg['retcode']
-                ret = json.dumps({'local': opts_pkg['_error']})
-                return ret, retcode
 
             pillar = salt.pillar.Pillar(
                     opts_pkg,
