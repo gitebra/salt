@@ -232,6 +232,10 @@ VALID_OPTS = {
     # List of startup states
     'sls_list': list,
 
+    # Configuration for snapper in the state system
+    'snapper_states': bool,
+    'snapper_states_config': str,
+
     # A top file to execute if startup_states == 'top'
     'top_file': str,
 
@@ -898,6 +902,9 @@ VALID_OPTS = {
 
     # Minion de-dup jid cache max size
     'minion_jid_queue_hwm': int,
+
+    # Minion data cache driver (one of satl.cache.* modules)
+    'cache': str,
 }
 
 # default configurations
@@ -1045,6 +1052,8 @@ DEFAULT_MINION_OPTS = {
     'state_auto_order': True,
     'state_events': False,
     'state_aggregate': False,
+    'snapper_states': False,
+    'snapper_states_config': 'root',
     'acceptance_wait_time': 10,
     'acceptance_wait_time_max': 0,
     'rejected_retry': False,
@@ -1091,7 +1100,7 @@ DEFAULT_MINION_OPTS = {
     'minion_id_caching': True,
     'keysize': 2048,
     'transport': 'zeromq',
-    'auth_timeout': 60,
+    'auth_timeout': 5,
     'auth_tries': 7,
     'master_tries': _MASTER_TRIES,
     'auth_safemode': False,
@@ -1400,6 +1409,7 @@ DEFAULT_MASTER_OPTS = {
     'http_max_body': 100 * 1024 * 1024 * 1024,  # 100GB
     'python2_bin': 'python2',
     'python3_bin': 'python3',
+    'cache': 'localfs',
 }
 
 

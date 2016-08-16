@@ -36,6 +36,23 @@ These updates include many more Thorium states, a system for automating
 key management, the ability to use Thorium to easily replace old
 reactors and a great deal of stability and bug fixes.
 
+State Rollback Using Snapper
+----------------------------
+
+Rollback has been one of the most prevalent requests for Salt. We
+have researched it extensively and concluded that the only way to
+accomplish truly reliable rollback would be to execute it at
+the filesystem layer. To accomplish this we have introduced Snapper
+integration into Salt States.
+
+Snapper is a tool which allows for simple and reliable snapshots
+of the filesystem to be made. With the new `snapper_states` option
+set to `True` in the minion config a snapshot will be made before
+and after every Salt State run.
+
+These snapshots can be viewed, managed and rolled back to via the
+`snapper` execution module.
+
 Preserve File Perms in File States
 ----------------------------------
 
@@ -312,6 +329,19 @@ Execution Module Deprecations
 
 - The ``contains_regex_multiline`` function was removed from the ``file`` execution module.
   Use ``file.search`` instead.
+
+- The ``lxc`` execution module has the following changes:
+
+  - The ``run_cmd`` function was removed. Use ``lxc.run`` instead.
+  - The ``nic`` argument was removed from the ``lxc.init`` function. Use ``network_profile``
+    instead.
+  - The ``clone`` argument was removed from the ``lxc.init`` function. Use ``clone_from``
+    instead.
+  - passwords passed to the ``lxc.init`` function will be assumed to be hashed, unless
+    ``password_encrypted=False``.
+  - The ``restart`` argument for ``lxc.start`` was removed. Use ``lxc.restart`` instead.
+  - The old style of defining lxc containers has been removed. Please use keys under which
+    LXC profiles should be configured such as ``lxc.container_profile.profile_name``.
 
 - ``reg`` execution module
 
