@@ -292,6 +292,11 @@ General Deprecations
       # will result in refresh evaluating to True and saltenv likely not being a string at all
       fcn('add more salt', 'prod', False)
 
+- Deprecations in ``minion.py``:
+
+  - The ``salt.minion.parse_args_and_kwargs`` function has been removed. Please
+  use the ``salt.minion.load_args_and_kwargs`` function instead.
+
 Cloud Deprecations
 ------------------
 
@@ -374,6 +379,12 @@ Execution Module Deprecations
 
 - The ``hash_hostname`` option was removed from the ``salt.modules.ssh`` execution
   module. The ``hash_known_hosts`` option should be used instead.
+
+- The ``human_readable`` option was removed from the ``uptime`` function in the
+  ``status`` execution module. The function was also updated in 2015.8.9 to return
+  a more complete offering of uptime information, formatted as an easy-to-read
+  dictionary. This updated function replaces the need for the ``human_readable``
+  option.
 
 - The ``zpool_list`` function in the ``zpool`` execution module was removed. Use ``list``
   instead.

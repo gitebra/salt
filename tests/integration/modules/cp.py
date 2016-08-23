@@ -3,6 +3,7 @@
 # Import python libs
 from __future__ import absolute_import
 import os
+import uuid
 import hashlib
 import tempfile
 
@@ -159,6 +160,24 @@ class CPModuleTest(integration.ModuleCase):
                     'salt://grail/scene33',
                     tgt,
                 ])
+        with salt.utils.fopen(tgt, 'r') as scene:
+            data = scene.read()
+            self.assertIn('KNIGHT:  They\'re nervous, sire.', data)
+            self.assertNotIn('bacon', data)
+
+    def test_get_url_makedirs(self):
+        '''
+        cp.get_url
+        '''
+        tgt = os.path.join(integration.TMP, 'make/dirs/scene33')
+        self.run_function(
+               'cp.get_url',
+                [
+                    'salt://grail/scene33',
+                    tgt,
+                ],
+                makedirs=True
+            )
         with salt.utils.fopen(tgt, 'r') as scene:
             data = scene.read()
             self.assertIn('KNIGHT:  They\'re nervous, sire.', data)
@@ -332,7 +351,8 @@ class CPModuleTest(integration.ModuleCase):
             os.unlink(tgt)
 
     def test_push(self):
-        log_to_xfer = os.path.join(tempfile.gettempdir(), 'salt-runtests.log')
+        log_to_xfer = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        open(log_to_xfer, 'w').close()
         try:
             self.run_function('cp.push', log_to_xfer)
             tgt_cache_file = os.path.join(
@@ -343,7 +363,7 @@ class CPModuleTest(integration.ModuleCase):
                 'minion',
                 'files',
                 tempfile.gettempdir(),
-                'salt-runtests.log')
+                log_to_xfer)
             self.assertTrue(os.path.isfile(tgt_cache_file), 'File was not cached on the master')
         finally:
             os.unlink(tgt_cache_file)
