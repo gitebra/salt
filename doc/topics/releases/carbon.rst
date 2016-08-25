@@ -297,6 +297,10 @@ General Deprecations
   - The ``salt.minion.parse_args_and_kwargs`` function has been removed. Please
   use the ``salt.minion.load_args_and_kwargs`` function instead.
 
+- When passing additional data to be used in a template context, ``context`` must be populated
+  with ``key: value`` pairs. Users must update their state files accordingly. Previous to this
+  release, users saw a deprecation warning. Now, a SaltInvocationError is raised instead.
+
 Cloud Deprecations
 ------------------
 
@@ -399,6 +403,9 @@ Runner Module Deprecations
 
 - The ``fileserver`` runner no longer accepts the ``outputter`` keyword argument. Users will
   need to specify an outputter using the ``--out`` option.
+
+- The ``jobs`` runner no longer accepts the ``ouputter`` keyword argument. Users will need to
+  specify an outputter using the ``--out`` option.
 
 - ``virt`` runner module:
 
