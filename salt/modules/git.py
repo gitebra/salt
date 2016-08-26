@@ -907,7 +907,7 @@ def config_get(key,
             Now optional if ``global`` is set to ``True``
 
     global : False
-        If ``True``, query the global git configuraton. Otherwise, only the
+        If ``True``, query the global git configuration. Otherwise, only the
         local git configuration will be queried.
 
         .. versionadded:: 2015.8.0
@@ -995,7 +995,7 @@ def config_get_regexp(key,
         The path to the git checkout
 
     global : False
-        If ``True``, query the global git configuraton. Otherwise, only the
+        If ``True``, query the global git configuration. Otherwise, only the
         local git configuration will be queried.
 
     user
