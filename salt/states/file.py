@@ -267,6 +267,7 @@ from datetime import datetime   # python3 problem in the making?
 import salt.loader
 import salt.payload
 import salt.utils
+import salt.utils.dictupdate
 import salt.utils.templates
 import salt.utils.url
 from salt.utils.locales import sdecode
@@ -2868,7 +2869,7 @@ def retention_schedule(name, retain, strptime_format=None, timezone=None):
     def get_file_time_from_strptime(f):
         try:
             ts = datetime.strptime(f, strptime_format)
-            ts_epoch = (ts - beginning_of_unix_time).total_seconds()
+            ts_epoch = salt.utils.total_seconds(ts - beginning_of_unix_time)
             return (ts, ts_epoch)
         except ValueError:
             # Files which don't match the pattern are not relevant files.
@@ -5011,8 +5012,7 @@ def serialize(name,
                 existing_data = __serializers__[deserializer_name](fhr)
 
             if existing_data is not None:
-                merged_data = existing_data.copy()
-                merged_data.update(dataset)
+                merged_data = salt.utils.dictupdate.merge_recurse(existing_data, dataset)
                 if existing_data == merged_data:
                     ret['result'] = True
                     ret['comment'] = 'The file {0} is in the correct state'.format(name)

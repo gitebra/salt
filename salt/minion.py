@@ -286,7 +286,7 @@ def load_args_and_kwargs(func, args, data=None, ignore_invalid=False):
                 _args.append(arg)
             elif string_kwarg:
                 salt.utils.warn_until(
-                    'Carbon',
+                    'Nitrogen',
                     'The list of function args and kwargs should be parsed '
                     'by salt.utils.args.parse_input() before calling '
                     'salt.minion.load_args_and_kwargs().'
@@ -894,7 +894,7 @@ class Minion(MinionBase):
 
         if signal.getsignal(signal.SIGTERM) is signal.SIG_DFL:
             # No custom signal handling was added, install our own
-            signal.signal(signal.SIGINT, self._handle_signals)
+            signal.signal(signal.SIGTERM, self._handle_signals)
 
     def _handle_signals(self, signum, sigframe):  # pylint: disable=unused-argument
         self._running = False
@@ -903,6 +903,7 @@ class Minion(MinionBase):
         self.process_manager.send_signal_to_processes(signum)
         # kill any remaining processes
         self.process_manager.kill_children()
+        time.sleep(1)
         sys.exit(0)
 
     def sync_connect_master(self, timeout=None):
@@ -2485,6 +2486,14 @@ class SyndicManager(MinionBase):
                 break
             master_id = masters.pop(0)
 
+    def _reset_event_aggregation(self):
+        self.job_rets = {}
+        self.raw_events = []
+
+    def reconnect_event_bus(self, something):
+        future = self.local.event.set_event_handler(self._process_event)
+        self.io_loop.add_future(future, self.reconnect_event_bus)
+
     # Syndic Tune In
     def tune_in(self):
         '''
@@ -2501,7 +2510,9 @@ class SyndicManager(MinionBase):
         # register the event sub to the poller
         self.job_rets = {}
         self.raw_events = []
-        self.local.event.set_event_handler(self._process_event)
+        self._reset_event_aggregation()
+        future = self.local.event.set_event_handler(self._process_event)
+        self.io_loop.add_future(future, self.reconnect_event_bus)
 
         # forward events every syndic_event_forward_timeout
         self.forward_events = tornado.ioloop.PeriodicCallback(self._forward_events,

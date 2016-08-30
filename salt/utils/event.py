@@ -773,7 +773,7 @@ class SaltEvent(object):
         if not self.cpub:
             self.connect_pub()
         # This will handle reconnects
-        self.subscriber.read_async(event_handler)
+        return self.subscriber.read_async(event_handler)
 
     def __del__(self):
         # skip exceptions in destroy-- since destroy() doesn't cover interpreter
@@ -1053,6 +1053,10 @@ class EventPublisher(salt.utils.process.SignalHandlingMultiprocessingProcess):
             self.puller.close()
         if hasattr(self, 'io_loop'):
             self.io_loop.close()
+
+    def _handle_signals(self, signum, sigframe):
+        self.close()
+        super(EventPublisher, self)._handle_signals(signum, sigframe)
 
     def __del__(self):
         self.close()
