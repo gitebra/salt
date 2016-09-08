@@ -60,10 +60,16 @@ import salt.version
 import salt.utils
 import salt.utils.process
 import salt.log.setup as salt_log_setup
+from salt.ext import six
 from salt.utils.verify import verify_env
 from salt.utils.immutabletypes import freeze
 from salt.utils.nb_popen import NonBlockingPopen
 from salt.exceptions import SaltClientError
+
+try:
+    from shlex import quote as _quote  # pylint: disable=E0611
+except ImportError:
+    from pipes import quote as _quote
 
 try:
     import salt.master
@@ -75,6 +81,7 @@ except ImportError:
 import yaml
 import msgpack
 import salt.ext.six as six
+from salt.ext.six.moves import cStringIO
 
 try:
     import salt.ext.six.moves.socketserver as socketserver
@@ -118,10 +125,16 @@ except ImportError:
             log.info('No process with the PID %s was found running', pid)
 
         if process and only_children is False:
-            cmdline = process.cmdline()
+            try:
+                cmdline = process.cmdline()
+            except psutil.AccessDenied:
+                # OSX denies us access to the above information
+                cmdline = None
             if not cmdline:
-                cmdline = process.as_dict()
-
+                try:
+                    cmdline = process.as_dict()
+                except psutil.NoSuchProcess as exc:
+                    log.debug('No such process found. Stacktrace: {0}'.format(exc))
             log.info('Sending %s to process: %s', sigint_name, cmdline)
             process.send_signal(sigint)
             try:
@@ -257,7 +270,15 @@ def get_unused_localhost_port():
         usock.close()
         return port
 
+    if sys.platform.startswith('darwin') and port in _RUNTESTS_PORTS:
+        port = get_unused_localhost_port()
+        usock.close()
+        return port
+
     _RUNTESTS_PORTS[port] = usock
+
+    if sys.platform.startswith('darwin'):
+        usock.close()
 
     return port
 
@@ -570,8 +591,18 @@ class SaltDaemonScriptBase(SaltScriptBase, ShellTestCase):
                     if conn == 0:
                         log.debug('Port %s is connectable!', port)
                         check_ports.remove(port)
-                        sock.shutdown(socket.SHUT_RDWR)
-                        sock.close()
+                        try:
+                            sock.shutdown(socket.SHUT_RDWR)
+                            sock.close()
+                        except socket.error as exc:
+                            if not sys.platform.startswith('darwin'):
+                                raise
+                            try:
+                                if exc.errno != errno.ENOTCONN:
+                                    raise
+                            except AttributeError:
+                                # This is not OSX !?
+                                pass
                     del sock
                 elif isinstance(port, str):
                     joined = self.run_run('manage.joined', config_dir=self.config_dir)
@@ -616,8 +647,9 @@ class SaltMaster(SaltDaemonScriptBase):
     def get_check_ports(self):
         #return set([self.config['runtests_conn_check_port']])
         return set([self.config['ret_port'],
-                    self.config['publish_port'],
-                    self.config['runtests_conn_check_port']])
+                    self.config['publish_port']])
+        # Disabled along with Pytest config until fixed.
+#                    self.config['runtests_conn_check_port']])
 
     def get_script_args(self):
         #return ['-l', 'debug']
@@ -1126,22 +1158,7 @@ class TestDaemon(object):
             syndic_opts[optname] = optname_path
             syndic_master_opts[optname] = optname_path
 
-        master_opts['runtests_conn_check_port'] = get_unused_localhost_port()
-        minion_opts['runtests_conn_check_port'] = get_unused_localhost_port()
-        sub_minion_opts['runtests_conn_check_port'] = get_unused_localhost_port()
-        syndic_opts['runtests_conn_check_port'] = get_unused_localhost_port()
-        syndic_master_opts['runtests_conn_check_port'] = get_unused_localhost_port()
-
         for conf in (master_opts, minion_opts, sub_minion_opts, syndic_opts, syndic_master_opts):
-            if 'engines' not in conf:
-                conf['engines'] = []
-            conf['engines'].append({'salt_runtests': {}})
-
-            if 'engines_dirs' not in conf:
-                conf['engines_dirs'] = []
-
-            conf['engines_dirs'].insert(0, ENGINES_DIR)
-
             if 'log_handlers_dirs' not in conf:
                 conf['log_handlers_dirs'] = []
             conf['log_handlers_dirs'].insert(0, LOG_HANDLERS_DIR)
@@ -1857,21 +1874,39 @@ class ShellCase(AdaptedConfigurationTestCaseMixIn, ShellTestCase, ScriptPathMixi
                                                   async_flag=' --async' if async else '')
         return self.run_script('salt-run', arg_str, with_retcode=with_retcode, catch_stderr=catch_stderr, timeout=30)
 
-    def run_run_plus(self, fun, options='', *arg, **kwargs):
+    def run_run_plus(self, fun, *arg, **kwargs):
         '''
-        Execute Salt run and the salt run function and return the data from
-        each in a dict
+        Execute the runner function and return the return data and output in a dict
         '''
-        ret = {}
-        ret['out'] = self.run_run(
-            '{0} {1} {2}'.format(options, fun, ' '.join(arg)), catch_stderr=kwargs.get('catch_stderr', None)
-        )
+        ret = {'fun': fun}
+        from_scratch = bool(kwargs.pop('__reload_config', False))
+        # Have to create an empty dict and then update it, as the result from
+        # self.get_config() is an ImmutableDict which cannot be updated.
         opts = {}
-        opts.update(self.get_config('client_config'))
-        opts.update({'doc': False, 'fun': fun, 'arg': arg})
+        opts.update(self.get_config('client_config', from_scratch=from_scratch))
+        opts_arg = list(arg)
+        if kwargs:
+            opts_arg.append({'__kwarg__': True})
+            opts_arg[-1].update(kwargs)
+        opts.update({'doc': False, 'fun': fun, 'arg': opts_arg})
         with RedirectStdStreams():
             runner = salt.runner.Runner(opts)
-            ret['fun'] = runner.run()
+            ret['return'] = runner.run()
+            try:
+                ret['jid'] = runner.jid
+            except AttributeError:
+                ret['jid'] = None
+
+        # Compile output
+        # TODO: Support outputters other than nested
+        opts['color'] = False
+        opts['output_file'] = cStringIO()
+        try:
+            salt.output.display_output(ret['return'], opts=opts)
+            ret['out'] = opts['output_file'].getvalue().splitlines()
+        finally:
+            opts['output_file'].close()
+
         return ret
 
     def run_key(self, arg_str, catch_stderr=False, with_retcode=False):
