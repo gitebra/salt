@@ -30,7 +30,7 @@ Connection module for Amazon DynamoDB
     If a region is not specified, the default is us-east-1.
 
     It's also possible to specify key, keyid and region via a profile, either
-    as a passed in dict, or as a string to pull from pillars or minion config::
+    as a passed in dict, or as a string to pull from pillars or minion config:
 
     .. code-block:: yaml
 
@@ -122,17 +122,13 @@ def create_table(table_name, region=None, key=None, keyid=None, profile=None,
     }
     local_table_indexes = []
     if local_indexes:
-        # Add the table's key
-        local_table_indexes.append(
-            AllIndex(primary_index_name, parts=primary_index_fields)
-        )
         for index in local_indexes:
-            local_table_indexes.append(_extract_index(index))
+            local_table_indexes.append(extract_index(index))
     global_table_indexes = []
     if global_indexes:
         for index in global_indexes:
             global_table_indexes.append(
-                _extract_index(index, global_index=True)
+                extract_index(index, global_index=True)
             )
 
     conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
@@ -180,6 +176,7 @@ def exists(table_name, region=None, key=None, keyid=None, profile=None):
         if e.error_code == 'ResourceNotFoundException':
             return False
         raise
+
     return True
 
 
@@ -209,10 +206,72 @@ def delete(table_name, region=None, key=None, keyid=None, profile=None):
     return False
 
 
-def _extract_index(index_data, global_index=False):
+def update(table_name, throughput=None, global_indexes=None,
+           region=None, key=None, keyid=None, profile=None):
+    '''
+    Update a DynamoDB table.
+
+    CLI example::
+
+        salt myminion boto_dynamodb.update table_name region=us-east-1
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    table = Table(table_name, connection=conn)
+    return table.update(throughput=throughput, global_indexes=global_indexes)
+
+
+def create_global_secondary_index(table_name, global_index, region=None,
+                                  key=None, keyid=None, profile=None):
+    '''
+    Creates a single global secondary index on a DynamoDB table.
+
+    CLI Example:
+    .. code-block:: bash
+
+        salt myminion boto_dynamodb.create_global_secondary_index table_name /
+        index_name
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    table = Table(table_name, connection=conn)
+    return table.create_global_secondary_index(global_index)
+
+
+def update_global_secondary_index(table_name, global_indexes, region=None,
+                                  key=None, keyid=None, profile=None):
+    '''
+    Updates the throughput of the given global secondary indexes.
+
+    CLI Example:
+    .. code-block:: bash
+
+        salt myminion boto_dynamodb.update_global_secondary_index table_name /
+        indexes
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    table = Table(table_name, connection=conn)
+    return table.update_global_secondary_index(global_indexes)
+
+
+def describe(table_name, region=None, key=None, keyid=None, profile=None):
+    '''
+    Describe a DynamoDB table.
+
+    CLI example::
+
+        salt myminion boto_dynamodb.describe table_name region=us-east-1
+    '''
+    conn = _get_conn(region=region, key=key, keyid=keyid, profile=profile)
+    table = Table(table_name, connection=conn)
+    return table.describe()
+
+
+def extract_index(index_data, global_index=False):
     '''
     Instantiates and returns an AllIndex object given a valid index
     configuration
+
+    CLI Example:
+        salt myminion boto_dynamodb.extract_index index
     '''
     parsed_data = {}
     keys = []
