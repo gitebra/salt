@@ -184,10 +184,16 @@ except ImportError:
             kill_children(children)
 
             if children:
-                psutil.wait_procs(children, timeout=10, callback=lambda proc: kill_children(children, terminate=True))
+                try:
+                    psutil.wait_procs(children, timeout=10, callback=lambda proc: kill_children(children, terminate=True))
+                except psutil.AccessDenied:
+                    kill_children(children, terminate=True)
 
             if children:
-                psutil.wait_procs(children, timeout=5, callback=lambda proc: kill_children(children, kill=True))
+                try:
+                    psutil.wait_procs(children, timeout=5, callback=lambda proc: kill_children(children, kill=True))
+                except psutil.AccessDenied:
+                    kill_children(children, kill=True)
 
 SYS_TMP_DIR = os.path.realpath(
     # Avoid ${TMPDIR} and gettempdir() on MacOS as they yield a base path too long
@@ -270,14 +276,17 @@ def get_unused_localhost_port():
         usock.close()
         return port
 
-    if sys.platform.startswith('darwin') and port in _RUNTESTS_PORTS:
+    DARWIN = True if sys.platform.startswith('darwin') else False
+    BSD = True if 'bsd' in sys.platform else False
+
+    if DARWIN and port in _RUNTESTS_PORTS:
         port = get_unused_localhost_port()
         usock.close()
         return port
 
     _RUNTESTS_PORTS[port] = usock
 
-    if sys.platform.startswith('darwin'):
+    if DARWIN or BSD:
         usock.close()
 
     return port
