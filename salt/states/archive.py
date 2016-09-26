@@ -84,7 +84,6 @@ def _cleanup_destdir(name):
 def extracted(name,
               source,
               archive_format,
-              archive_user=None,
               password=None,
               user=None,
               group=None,
@@ -371,15 +370,21 @@ def extracted(name,
                           .format(name.rstrip('/')))
         return ret
     elif not __salt__['file.directory_exists'](name):
-        __salt__['file.makedirs'](name, user=archive_user)
+        __salt__['file.makedirs'](name, user=user, group=group)
         created_destdir = True
 
     log.debug('Extracting {0} to {1}'.format(filename, name))
     if archive_format == 'zip':
-        if use_cmd_unzip:
-            files = __salt__['archive.cmd_unzip'](filename, name, options=zip_options, trim_output=trim_output, **kwargs)
+        if password is None and salt.utils.which('unzip'):
+            files = __salt__['archive.cmd_unzip'](filename, name, trim_output=trim_output)
         else:
-            files = __salt__['archive.unzip'](filename, name, options=zip_options, trim_output=trim_output, password=password, **kwargs)
+            # https://bugs.python.org/issue15795
+            if password is not None:
+                log.warning('Password supplied: using archive.unzip')
+            if not salt.utils.which('unzip'):
+                log.warning('Cannot find unzip command for archive.cmd_unzip:'
+                            ' using archive.unzip instead')
+            files = __salt__['archive.unzip'](filename, name, trim_output=trim_output, password=password)
     elif archive_format == 'rar':
         files = __salt__['archive.unrar'](filename, name, trim_output=trim_output, **kwargs)
     else:

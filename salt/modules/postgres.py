@@ -692,7 +692,7 @@ def tablespace_create(name, location, options=None, owner=None, user=None,
         owner_query = 'OWNER "{0}"'.format(owner)
         # should come out looking like: 'OWNER postgres'
     if options:
-        optionstext = ['{0} = {1}'.format(k, v) for k, v in options.items()]
+        optionstext = ['{0} = {1}'.format(k, v) for k, v in six.iteritems(options)]
         options_query = 'WITH ( {0} )'.format(', '.join(optionstext))
         # should come out looking like: 'WITH ( opt1 = 1.0, opt2 = 4.0 )'
     query = 'CREATE TABLESPACE "{0}" {1} LOCATION \'{2}\' {3}'.format(name,
@@ -2908,12 +2908,21 @@ def privileges_grant(name,
         if object_type == 'group':
             query = 'GRANT {0} TO "{1}" WITH ADMIN OPTION'.format(
                 object_name, name)
+        elif (object_type in ('table', 'sequence') and
+                object_name.upper() == 'ALL'):
+            query = 'GRANT {0} ON ALL {1}S IN SCHEMA {2} TO ' \
+                    '"{3}" WITH GRANT OPTION'.format(
+                _grants, object_type.upper(), prepend, name)
         else:
             query = 'GRANT {0} ON {1} {2} TO "{3}" WITH GRANT OPTION'.format(
                 _grants, object_type.upper(), on_part, name)
     else:
         if object_type == 'group':
             query = 'GRANT {0} TO "{1}"'.format(object_name, name)
+        elif (object_type in ('table', 'sequence') and
+                object_name.upper() == 'ALL'):
+            query = 'GRANT {0} ON ALL {1}S IN SCHEMA {2} TO "{3}"'.format(
+                _grants, object_type.upper(), prepend, name)
         else:
             query = 'GRANT {0} ON {1} {2} TO "{3}"'.format(
                 _grants, object_type.upper(), on_part, name)

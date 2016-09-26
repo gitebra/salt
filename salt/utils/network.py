@@ -5,6 +5,7 @@ Define some generic socket functions for network modules
 
 # Import python libs
 from __future__ import absolute_import
+import itertools
 import os
 import re
 import socket
@@ -242,6 +243,17 @@ def natural_ipv4_netmask(ip, fmt='prefixlen'):
         return '/' + mask
 
 
+def rpad_ipv4_network(ip):
+    '''
+    Returns an IP network address padded with zeros.
+
+    Ex: '192.168.3' -> '192.168.3.0'
+        '10.209' -> '10.209.0.0'
+    '''
+    return '.'.join(itertools.islice(itertools.chain(ip.split('.'), '0000'), 0,
+                                     4))
+
+
 def cidr_to_ipv4_netmask(cidr_bits):
     '''
     Returns an IPv4 netmask
@@ -455,7 +467,10 @@ def _interfaces_ifconfig(out):
                     if not salt.utils.is_sunos():
                         ipv6scope = mmask6.group(3) or mmask6.group(4)
                         addr_obj['scope'] = ipv6scope.lower() if ipv6scope is not None else ipv6scope
-                if addr_obj['address'] != '::' and addr_obj['prefixlen'] != 0:  # SunOS sometimes has ::/0 as inet6 addr when using addrconf
+                # SunOS sometimes has ::/0 as inet6 addr when using addrconf
+                if not salt.utils.is_sunos() \
+                        or addr_obj['address'] != '::' \
+                        and addr_obj['prefixlen'] != 0:
                     data['inet6'].append(addr_obj)
         data['up'] = updown
         if iface in ret:

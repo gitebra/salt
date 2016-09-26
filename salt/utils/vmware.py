@@ -570,6 +570,22 @@ def get_inventory(service_instance):
     return service_instance.RetrieveContent()
 
 
+def get_root_folder(service_instance):
+    '''
+    Returns the root folder of a vCenter.
+
+    service_instance
+        The Service Instance Object for which to obtain the root folder.
+    '''
+    try:
+        log.trace('Retrieving root folder')
+        return service_instance.RetrieveContent().rootFolder
+    except vim.fault.VimFault as exc:
+        raise salt.exceptions.VMwareApiError(exc.msg)
+    except vmodl.RuntimeFault as exc:
+        raise salt.exceptions.VMwareRuntimeError(exc.msg)
+
+
 def get_content(service_instance, obj_type, property_list=None,
                 container_ref=None, traversal_spec=None,
                 local_properties=False):
@@ -919,7 +935,15 @@ def wait_for_task(task, instance_name, task_type, sleep_seconds=1, log_level='de
     '''
     time_counter = 0
     start_time = time.time()
-    while task.info.state == 'running' or task.info.state == 'queued':
+    log.trace('task = {0}, task_type = {1}'.format(task,
+                                                   task.__class__.__name__))
+    try:
+        task_info = task.info
+    except vim.fault.VimFault as exc:
+        raise salt.exceptions.VMwareApiError(exc.msg)
+    except vmodl.RuntimeFault as exc:
+        raise salt.exceptions.VMwareRuntimeError(exc.msg)
+    while task_info.state == 'running' or task_info.state == 'queued':
         if time_counter % sleep_seconds == 0:
             msg = '[ {0} ] Waiting for {1} task to finish [{2} s]'.format(
                 instance_name, task_type, time_counter)
@@ -929,9 +953,13 @@ def wait_for_task(task, instance_name, task_type, sleep_seconds=1, log_level='de
                 log.debug(msg)
         time.sleep(1.0 - ((time.time() - start_time) % 1.0))
         time_counter += 1
-    log.trace('task = {0}, task_type = {1}'.format(task,
-                                                   task.__class__.__name__))
-    if task.info.state == 'success':
+        try:
+            task_info = task.info
+        except vim.fault.VimFault as exc:
+            raise salt.exceptions.VMwareApiError(exc.msg)
+        except vmodl.RuntimeFault as exc:
+            raise salt.exceptions.VMwareRuntimeError(exc.msg)
+    if task_info.state == 'success':
         msg = '[ {0} ] Successfully completed {1} task in {2} seconds'.format(
             instance_name, task_type, time_counter)
         if log_level == 'info':
@@ -939,7 +967,12 @@ def wait_for_task(task, instance_name, task_type, sleep_seconds=1, log_level='de
         else:
             log.debug(msg)
         # task is in a successful state
-        return task.info.result
+        return task_info.result
     else:
         # task is in an error state
-        raise task.info.error
+        try:
+            raise task_info.error
+        except vim.fault.VimFault as exc:
+            raise salt.exceptions.VMwareApiError(exc.msg)
+        except vmodl.fault.SystemError as exc:
+            raise salt.exceptions.VMwareSystemError(exc.msg)

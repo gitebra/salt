@@ -539,7 +539,8 @@ class Master(SMaster):
                                       'reload': salt.crypt.Crypticle.generate_key_string
                                      }
             log.info('Creating master process manager')
-            self.process_manager = salt.utils.process.ProcessManager(name='Master_ProcessManager')
+            # Since there are children having their own ProcessManager we should wait for kill more time.
+            self.process_manager = salt.utils.process.ProcessManager(wait_for_kill=5)
             pub_channels = []
             log.info('Creating master publisher process')
             for transport, opts in iter_transport_opts(self.opts):
@@ -726,7 +727,9 @@ class ReqServer(SignalHandlingMultiprocessingProcess):
             except os.error:
                 pass
 
-        self.process_manager = salt.utils.process.ProcessManager(name='ReqServer_ProcessManager')
+        # Wait for kill should be less then parent's ProcessManager.
+        self.process_manager = salt.utils.process.ProcessManager(name='ReqServer_ProcessManager',
+                                                                 wait_for_kill=1)
 
         req_channels = []
         tcp_only = True
@@ -954,7 +957,7 @@ class AESFuncs(object):
         self.mminion = salt.minion.MasterMinion(
             self.opts,
             states=False,
-            rend=False,
+            rend=True,
             ignore_config_errors=True
         )
         self.__setup_fileserver()
@@ -1326,7 +1329,8 @@ class AESFuncs(object):
             load.get('saltenv', load.get('env')),
             ext=load.get('ext'),
             pillar=load.get('pillar_override', {}),
-            pillarenv=load.get('pillarenv'))
+            pillarenv=load.get('pillarenv'),
+            rend=self.mminion.rend)
         data = pillar.compile_pillar(pillar_dirs=pillar_dirs)
         self.fs_.update_opts()
         if self.opts.get('minion_data_cache', False):
