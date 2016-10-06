@@ -636,6 +636,9 @@ def _virtual(osdata):
                 grains['virtual'] = 'Parallels'
             elif 'Manufacturer: Google' in output:
                 grains['virtual'] = 'kvm'
+            # Proxmox KVM
+            elif 'Vendor: SeaBIOS' in output:
+                grains['virtual'] = 'kvm'
             # Break out of the loop, lspci parsing is not necessary
             break
         elif command == 'lspci':
@@ -1047,6 +1050,7 @@ _OS_NAME_MAP = {
     'manjaro': 'Manjaro',
     'antergos': 'Antergos',
     'sles': 'SUSE',
+    'slesexpand': 'RES',
     'void': 'Void',
     'linuxmint': 'Mint',
 }
@@ -1070,6 +1074,7 @@ _OS_FAMILY_MAP = {
     'OEL': 'RedHat',
     'XCP': 'RedHat',
     'XenServer': 'RedHat',
+    'RES': 'RedHat',
     'Mandrake': 'Mandriva',
     'ESXi': 'VMware',
     'Mint': 'Debian',
