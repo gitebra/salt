@@ -14,6 +14,7 @@ import logging
 from salt.exceptions import SaltInvocationError, CommandExecutionError
 from salt.ext.six import string_types, integer_types
 import salt.utils
+import salt.utils.files
 
 # TODO: Check that the passed arguments are correct
 
@@ -493,7 +494,6 @@ def cmd_unzip(zip_file, dest, excludes=None,
     return _trim_files(files, trim_output)
 
 
-@salt.utils.decorators.depends('zipfile', fallback_function=cmd_unzip)
 def unzip(zip_file, dest, excludes=None, options=None, template=None,
           runas=None, trim_output=False, password=None, extract_perms=False):
     '''
@@ -760,7 +760,7 @@ def _render_filenames(filenames, zip_file, saltenv, template):
         temp file, rendering that file, and returning the result.
         '''
         # write out path to temp file
-        tmp_path_fn = salt.utils.mkstemp()
+        tmp_path_fn = salt.utils.files.mkstemp()
         with salt.utils.fopen(tmp_path_fn, 'w+') as fp_:
             fp_.write(contents)
         data = salt.utils.templates.TEMPLATE_REGISTRY[template](
