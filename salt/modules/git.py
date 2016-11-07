@@ -9,8 +9,7 @@ import copy
 import logging
 import os
 import re
-import shlex
-from distutils.version import LooseVersion as _LooseVersion
+from distutils.version import LooseVersion as _LooseVersion  # pylint: disable=no-name-in-module
 
 # Import salt libs
 import salt.utils
@@ -31,7 +30,11 @@ def __virtual__():
     '''
     Only load if git exists on the system
     '''
-    return True if salt.utils.which('git') else False
+    if salt.utils.which('git') is None:
+        return (False,
+                'The git execution module cannot be loaded: git unavailable.')
+    else:
+        return True
 
 
 def _check_worktree_support(failhard=True):
@@ -130,7 +133,7 @@ def _format_opts(opts):
         if not isinstance(opts, six.string_types):
             opts = [str(opts)]
         else:
-            opts = shlex.split(opts)
+            opts = salt.utils.shlex_split(opts)
     try:
         if opts[-1] == '--':
             # Strip the '--' if it was passed at the end of the opts string,
@@ -3133,7 +3136,7 @@ def rebase(cwd,
     command.extend(opts)
     if not isinstance(rev, six.string_types):
         rev = str(rev)
-    command.extend(shlex.split(rev))
+    command.extend(salt.utils.shlex_split(rev))
     return _git_run(command,
                     cwd=cwd,
                     user=user,
