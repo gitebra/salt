@@ -7,7 +7,7 @@ VMware Cloud Module
 
 The VMware cloud module allows you to manage VMware ESX, ESXi, and vCenter.
 
-See :doc:`Getting started with VMware </topics/cloud/vmware>` to get started.
+See :ref:`Getting started with VMware <cloud-getting-started-vmware>` to get started.
 
 :codeauthor: Nitin Madhok <nmadhok@clemson.edu>
 
@@ -2270,11 +2270,6 @@ def create(vm_):
             return False
     except AttributeError:
         pass
-
-    # Since using "provider: <provider-engine>" is deprecated, alias provider
-    # to use driver: "driver: <provider-engine>"
-    if 'provider' in vm_:
-        vm_['driver'] = vm_.pop('provider')
 
     __utils__['cloud.fire_event'](
         'event',

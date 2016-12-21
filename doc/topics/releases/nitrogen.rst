@@ -86,10 +86,15 @@ General Deprecations
 --------------------
 
 - Beacon configurations should be lists instead of dictionaries.
+- The ``PidfileMixin`` has been removed. Please use ``DaemonMixIn`` instead.
 
 Configuration Option Deprecations
 ---------------------------------
 
+- The ``client_acl`` configuration option has been removed. Please use
+  ``publisher_acl`` instead.
+- The ``client_acl_blacklist`` configuration option has been removed.
+  Please use ``publisher_acl_blacklist`` instead.
 - The ``win_gitrepos`` configuration option has been removed. Please use
   the ``winrepo_remotes`` option instead.
 - The ``win_repo`` configuration option has been removed. Please use
@@ -123,6 +128,13 @@ Salt-API Deprecations
 - The ``SaltAPI.run()`` function has been removed. Please use the
   ``SaltAPI.start()`` function instead.
 
+Salt-Cloud Deprecations
+-----------------------
+
+- Support for using the keyword ``provider`` in salt-cloud provider config
+  files has been removed. Please use ``driver`` instead. The ``provider``
+  keyword should now only be used in cloud profile config files.
+
 Salt-SSH Deprecations
 ---------------------
 
@@ -131,6 +143,21 @@ Salt-SSH Deprecations
 
 State Deprecations
 ------------------
+
+The ``apache_conf`` state had the following functions removed:
+
+  - ``disable``: Please use ``disabled`` instead.
+  - ``enable``: Please use ``enabled`` instead.
+
+The ``apache_module`` state had the following functions removed:
+
+  - ``disable``: Please use ``disabled`` instead.
+  - ``enable``: Please use ``enabled`` instead.
+
+The ``apache_site`` state had the following functions removed:
+
+  - ``disable``: Please use ``disabled`` instead.
+  - ``enable``: Please use ``enabled`` instead.
 
 - The ``chocolatey`` state had the following functions removed:
 
