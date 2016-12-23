@@ -347,6 +347,7 @@ execution modules
     ssh
     ssh_package
     ssh_service
+    snapper
     state
     status
     stormpath
@@ -370,6 +371,7 @@ execution modules
     tls
     tomcat
     trafficserver
+    travisci
     tuned
     twilio_notify
     udev

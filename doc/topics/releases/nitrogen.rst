@@ -60,8 +60,22 @@ Execution Module Changes
 Master Configuration Additions
 ==============================
 
-- ``syndic_forward_all_events``: Option on multi-syndic or single when connected
-  to multiple masters to be able to send events to all connected masters.
+- :conf_master:`syndic_forward_all_events` - Option on multi-syndic or single
+  when connected to multiple masters to be able to send events to all connected
+  masters.
+
+Minion Configuration Additions
+==============================
+
+- :conf_minion:`pillarenv_from_saltenv` - When set to ``True`` (default is
+  ``False``), the :conf_minion:`pillarenv` option will take the same value as
+  the effective saltenv when running states. This would allow a user to run
+  ``salt '*' state.apply mysls saltenv=dev``, and the SLS for both the state
+  and pillar data would be sourced from the ``dev`` environment, essentially
+  the equivalent of running ``salt '*' state.apply mysls saltenv=dev
+  pillarenv=dev``. Note that if :conf_minion:`pillarenv` is set in the minion
+  config file, or if ``pillarenv`` is provided on the CLI, it will override
+  this option.
 
 Python API Changes
 ==================
@@ -87,6 +101,10 @@ General Deprecations
 
 - Beacon configurations should be lists instead of dictionaries.
 - The ``PidfileMixin`` has been removed. Please use ``DaemonMixIn`` instead.
+- The ``use_pending`` argument was removed from the ``salt.utils.event.get_event``
+  function.
+- The ``pending_tags`` argument was removed from the ``salt.utils.event.get_event``
+  function.
 
 Configuration Option Deprecations
 ---------------------------------
@@ -105,7 +123,28 @@ Configuration Option Deprecations
 Module Deprecations
 -------------------
 
-- The ``win_repo_source_dir`` option has been removed from the ``win_repo``
+The ``git`` execution module had the following changes:
+
+- The ``fmt`` argument was removed from the ``archive`` function. Please
+  use ``format`` instead.
+- The ``repository`` argument was removed from the ``clone`` function.
+  Please use ``url`` instead.
+- The ``is_global`` argument was removed from the ``config_set`` function.
+  Please use ``global`` instead.
+- The ``branch`` argument was removed from the ``merge`` function. Please
+  use ``rev`` instead.
+- The ``branch`` argument was removed from the ``push`` function. Please
+  use ``rev`` instead.
+
+The ``glusterfs`` execution module had the following functions removed:
+
+- ``create``: Please use ``create_volume`` instead.
+- ``delete``: Please use ``delete_volume`` instead.
+-  ``list_peers``: Please use ``peer_status`` instead.
+
+The ``win_repo`` execution module had the following changes:
+
+- The ``win_repo_source_dir`` option was removed from the ``win_repo``
   module. Please use ``winrepo_source_dir`` instead.
 
 Pillar Deprecations
@@ -159,7 +198,24 @@ The ``apache_site`` state had the following functions removed:
   - ``disable``: Please use ``disabled`` instead.
   - ``enable``: Please use ``enabled`` instead.
 
-- The ``chocolatey`` state had the following functions removed:
+The ``chocolatey`` state had the following functions removed:
 
   - ``install``: Please use ``installed`` instead.
   - ``uninstall``: Please use ``uninstalled`` instead.
+
+The ``git`` state had the following changes:
+
+  - The ``config`` function was removed. Please use ``config_set`` instead.
+  - The ``is_global`` option was removed from the ``config_set`` function.
+    Please use ``global`` instead.
+  - The ``always_fetch`` option was removed from the ``latest`` function, as
+    it no longer has any effect. Please see the :ref:`2015.8.0<release-2015-8-0>`
+    release notes for more information.
+  - The ``force`` option was removed from the ``latest`` function. Please
+    use ``force_clone`` instead.
+  - The ``remote_name`` option was removed from the ``latest`` function.
+    Please use ``remote`` instead.
+
+The ``glusterfs`` state had the following function removed:
+
+  - ``created``: Please use ``volume_present`` instead.

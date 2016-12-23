@@ -224,6 +224,9 @@ VALID_OPTS = {
     # Force the minion into a single pillar root when it fetches pillar data from the master
     'pillarenv': str,
 
+    # Make the pillarenv always match the effective saltenv
+    'pillarenv_from_saltenv': bool,
+
     # Allows a user to provide an alternate name for top.sls
     'state_top': str,
 
@@ -940,6 +943,9 @@ VALID_OPTS = {
     'thin_extra_mods': str,
     'min_extra_mods': str,
 
+    # Default returners minion should use. List or comma-delimited string
+    'return': (str, list),
+
     # TLS/SSL connection options. This could be set to a dictionary containing arguments
     # corresponding to python ssl.wrap_socket method. For details see:
     # http://www.tornadoweb.org/en/stable/tcpserver.html#tornado.tcpserver.TCPServer
@@ -1001,6 +1007,7 @@ DEFAULT_MINION_OPTS = {
     'autoload_dynamic_modules': True,
     'environment': None,
     'pillarenv': None,
+    'pillarenv_from_saltenv': False,
     'pillar_opts': False,
     # ``pillar_cache``, ``pillar_cache_ttl`` and ``pillar_cache_backend``
     # are not used on the minion but are unavoidably in the code path
@@ -1692,6 +1699,10 @@ def _validate_opts(opts):
                            type(val).__name__,
                            format_multi_opt(VALID_OPTS[key]))
             )
+
+    # Convert list to comma-delimited string for 'return' config option
+    if isinstance(opts.get('return'), list):
+        opts['return'] = ','.join(opts['return'])
 
     # RAET on Windows uses 'win32file.CreateMailslot()' for IPC. Due to this,
     # sock_dirs must start with '\\.\mailslot\' and not contain any colons.
