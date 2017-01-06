@@ -26,6 +26,7 @@ import salt.minion
 import salt.utils
 import salt.utils.network
 import integration
+from salt.syspaths import CONFIG_DIR
 from salt import config as sconfig
 from salt.exceptions import (
     CommandExecutionError,
@@ -154,7 +155,7 @@ class ConfigTestCase(TestCase, integration.AdaptedConfigurationTestCaseMixIn):
 
             os.environ['SALT_MASTER_CONFIG'] = env_fpath
             # Should load from env variable, not the default configuration file.
-            config = sconfig.master_config('/etc/salt/master')
+            config = sconfig.master_config('{0}/master'.format(CONFIG_DIR))
             self.assertEqual(config['log_file'], env_fpath)
             os.environ.clear()
             os.environ.update(original_environ)
@@ -198,7 +199,7 @@ class ConfigTestCase(TestCase, integration.AdaptedConfigurationTestCaseMixIn):
 
             os.environ['SALT_MINION_CONFIG'] = env_fpath
             # Should load from env variable, not the default configuration file
-            config = sconfig.minion_config('/etc/salt/minion')
+            config = sconfig.minion_config('{0}/minion'.format(CONFIG_DIR))
             self.assertEqual(config['log_file'], env_fpath)
             os.environ.clear()
             os.environ.update(original_environ)
@@ -547,6 +548,33 @@ class ConfigTestCase(TestCase, integration.AdaptedConfigurationTestCaseMixIn):
                           'provider': 'test-config:ec2'},
                'dev-instances': {'profile': 'dev-instances',
                                  'ssh_username': 'test_user',
+                                 'provider': 'test-config:ec2'}}
+        self.assertEqual(sconfig.apply_vm_profiles_config(providers,
+                                                          overrides,
+                                                          defaults=DEFAULT), ret)
+
+    def test_apply_vm_profiles_config_extend_override_success(self):
+        '''
+        Tests profile extends and recursively merges data elements
+        '''
+        self.maxDiff = None
+        providers = {'test-config': {'ec2': {'profiles': {}, 'driver': 'ec2'}}}
+        overrides = {'Fedora': {'image': 'test-image-2',
+                                'extends': 'dev-instances',
+                                'minion': {'grains': {'stage': 'experimental'}}},
+                     'conf_file': PATH,
+                     'dev-instances': {'ssh_username': 'test_user',
+                                       'provider': 'test-config',
+                                       'minion': {'grains': {'role': 'webserver'}}}}
+        ret = {'Fedora': {'profile': 'Fedora',
+                          'ssh_username': 'test_user',
+                          'image': 'test-image-2',
+                          'minion': {'grains': {'role': 'webserver',
+                                                'stage': 'experimental'}},
+                          'provider': 'test-config:ec2'},
+               'dev-instances': {'profile': 'dev-instances',
+                                 'ssh_username': 'test_user',
+                                 'minion': {'grains': {'role': 'webserver'}},
                                  'provider': 'test-config:ec2'}}
         self.assertEqual(sconfig.apply_vm_profiles_config(providers,
                                                           overrides,
