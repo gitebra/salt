@@ -888,9 +888,15 @@ class LogLevelMixIn(six.with_metaclass(MixInMeta, object)):
             # will go through the logging listener.
             return
 
+        # ensure that yaml stays valid with log output
+        if getattr(self.options, 'output', None) == 'yaml':
+            log_format = '# {0}'.format(self.config['log_fmt_console'])
+        else:
+            log_format = self.config['log_fmt_console']
+
         log.setup_console_logger(
             self.config['log_level'],
-            log_format=self.config['log_fmt_console'],
+            log_format=log_format,
             date_format=self.config['log_datefmt_console']
         )
         for name, level in six.iteritems(self.config.get('log_granular_levels', {})):
@@ -1983,9 +1989,16 @@ class SaltCMDOptionParser(six.with_metaclass(OptionParserMeta,
             default=False,
             help=('Dump the master configuration values')
         )
+        self.add_option(
+            '--preview-target',
+            dest='preview_target',
+            action='store_true',
+            default=False,
+            help=('Show the minions expected to match a target. Does not issue any command.')
+        )
 
     def _mixin_after_parsed(self):
-        if len(self.args) <= 1 and not self.options.doc:
+        if len(self.args) <= 1 and not self.options.doc and not self.options.preview_target:
             try:
                 self.print_help()
             except Exception:  # pylint: disable=broad-except
@@ -2001,6 +2014,10 @@ class SaltCMDOptionParser(six.with_metaclass(OptionParserMeta,
             cfg = config.master_config(self.get_config_file_path())
             sys.stdout.write(yaml.dump(cfg, default_flow_style=False))
             sys.exit(salt.defaults.exitcodes.EX_OK)
+
+        if self.options.preview_target:
+            # Insert dummy arg which won't be used
+            self.args.append('not_a_valid_command')
 
         if self.options.doc:
             # Include the target
