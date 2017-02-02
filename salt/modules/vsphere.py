@@ -266,6 +266,9 @@ def gets_service_instance_via_proxy(fn):
         3. If the ``service_instance`` parameter in not defined, the
         connection is created using the proxy details and the service instance
         is returned.
+
+    CLI Example:
+        None, this is a decorator
     '''
     fn_name = fn.__name__
     try:
@@ -346,6 +349,9 @@ def get_service_instance_via_proxy(service_instance=None):
 
     Note:
         Should be used by state functions not invoked directly.
+
+    CLI Example:
+        See note above
     '''
     connection_details = _get_proxy_connection_details()
     return salt.utils.vmware.get_service_instance(*connection_details)
@@ -361,6 +367,10 @@ def disconnect(service_instance):
 
     service_instance
         Service instance (vim.ServiceInstance)
+
+    CLI Example:
+
+        See note above.
     '''
     salt.utils.vmware.disconnect(service_instance)
     return True
@@ -1915,6 +1925,7 @@ def list_datacenters(host, username, password, protocol=None, port=None):
     .. code-block:: bash
 
         salt '*' vsphere.list_datacenters 1.2.3.4 root bad-password
+
     '''
     service_instance = salt.utils.vmware.get_service_instance(host=host,
                                                               username=username,
@@ -1951,6 +1962,7 @@ def list_clusters(host, username, password, protocol=None, port=None):
     .. code-block:: bash
 
         salt '*' vsphere.list_clusters 1.2.3.4 root bad-password
+
     '''
     service_instance = salt.utils.vmware.get_service_instance(host=host,
                                                               username=username,
@@ -2274,6 +2286,7 @@ def list_vapps(host, username, password, protocol=None, port=None):
 
     .. code-block:: bash
 
+        # List vapps from all minions
         salt '*' vsphere.list_vapps 1.2.3.4 root bad-password
     '''
     service_instance = salt.utils.vmware.get_service_instance(host=host,
