@@ -110,24 +110,37 @@ def enforce_types(key, val):
         'insecure_auth': bool,
         'env_whitelist': 'stringlist',
         'env_blacklist': 'stringlist',
-        'gitfs_env_whitelist': 'stringlist',
-        'gitfs_env_blacklist': 'stringlist',
         'refspecs': 'stringlist',
-        'gitfs_refspecs': 'stringlist',
     }
 
+    def _find_global(key):
+        for item in non_string_params:
+            try:
+                if key.endswith('_' + item):
+                    ret = item
+                    break
+            except TypeError:
+                if key.endswith('_' + str(item)):
+                    ret = item
+                    break
+        else:
+            ret = None
+        return ret
+
     if key not in non_string_params:
-        return six.text_type(val)
-    else:
-        expected = non_string_params[key]
-        if expected is bool:
-            return val
-        elif expected == 'stringlist':
-            if not isinstance(val, (six.string_types, list)):
-                val = six.text_type(val)
-            if isinstance(val, six.string_types):
-                return [x.strip() for x in val.split(',')]
-            return [six.text_type(x) for x in val]
+        key = _find_global(key)
+        if key is None:
+            return six.text_type(val)
+
+    expected = non_string_params[key]
+    if expected is bool:
+        return val
+    elif expected == 'stringlist':
+        if not isinstance(val, (six.string_types, list)):
+            val = six.text_type(val)
+        if isinstance(val, six.string_types):
+            return [x.strip() for x in val.split(',')]
+        return [six.text_type(x) for x in val]
 
 
 def failhard(role):
@@ -310,7 +323,11 @@ class GitProvider(object):
             failhard(self.role)
 
         hash_type = getattr(hashlib, self.opts.get('hash_type', 'md5'))
-        self.hash = hash_type(self.id).hexdigest()
+        if six.PY3:
+            # We loaded this data from yaml configuration files, so, its safe to use UTF-8
+            self.hash = hash_type(self.id.encode('utf-8')).hexdigest()
+        else:
+            self.hash = hash_type(self.id).hexdigest()
         self.cachedir_basename = getattr(self, 'name', self.hash)
         self.cachedir = salt.utils.path_join(cache_root, self.cachedir_basename)
         if not os.path.isdir(self.cachedir):
@@ -433,7 +450,7 @@ class GitProvider(object):
         cmd = subprocess.Popen(
             shlex.split(cmd_str),
             close_fds=not salt.utils.is_windows(),
-            cwd=self.repo.workdir,
+            cwd=os.path.dirname(self.gitdir),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
         output = cmd.communicate()[0]
@@ -525,7 +542,7 @@ class GitProvider(object):
             cmd = subprocess.Popen(
                 shlex.split(cmd_str),
                 close_fds=not salt.utils.is_windows(),
-                cwd=self.repo.workdir,
+                cwd=os.path.dirname(self.gitdir),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
             output = cmd.communicate()[0]
@@ -2014,8 +2031,8 @@ class GitBase(object):
                     changed = True
             except Exception as exc:
                 log.error(
-                    'Exception \'{0}\' caught while fetching {1} remote '
-                    '\'{2}\''.format(exc, self.role, repo.id),
+                    'Exception caught while fetching %s remote \'%s\': %s',
+                    self.role, repo.id, exc,
                     exc_info_on_loglevel=logging.DEBUG
                 )
         return changed
