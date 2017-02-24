@@ -356,9 +356,10 @@ class Client(object):
                         del dirs[:]
                     else:
                         for found_file in files:
-                            stripped_root = os.path.relpath(root, path).replace('/', '.')
+                            stripped_root = os.path.relpath(root, path)
                             if salt.utils.is_windows():
                                 stripped_root = stripped_root.replace('\\', '/')
+                            stripped_root = stripped_root.replace('/', '.')
                             if found_file.endswith(('.sls')):
                                 if found_file.endswith('init.sls'):
                                     if stripped_root.endswith('.'):
@@ -1340,6 +1341,7 @@ class FSClient(RemoteClient):
     '''
     def __init__(self, opts):  # pylint: disable=W0231
         self.opts = opts
+        self.utils = salt.loader.utils(opts)
         self.channel = salt.fileserver.FSChan(opts)
         self.auth = DumbAuth()
 
