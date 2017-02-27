@@ -279,7 +279,7 @@ class SystemdScopeTestCase(TestCase):
                                                    'stderr': '',
                                                    'pid': 12345})
 
-    def _change_state(self, action):
+    def _change_state(self, action, no_block=False):
         '''
         Common code for start/stop/restart/reload/force_reload tests
         '''
@@ -288,7 +288,11 @@ class SystemdScopeTestCase(TestCase):
         func = getattr(systemd, action)
         # Remove trailing _ in "reload_"
         action = action.rstrip('_').replace('_', '-')
-        systemctl_command = ['systemctl', action, self.unit_name + '.service']
+        systemctl_command = ['systemctl']
+        if no_block:
+            systemctl_command.append('--no-block')
+        systemctl_command.extend([action, self.unit_name + '.service'])
+        scope_prefix = ['systemd-run', '--scope']
 
         assert_kwargs = {'python_shell': False}
         if action in ('enable', 'disable'):
@@ -307,10 +311,10 @@ class SystemdScopeTestCase(TestCase):
                                     systemd.__salt__,
                                     {'config.get': self.mock_true,
                                      'cmd.retcode': self.mock_success}):
-                                ret = func(self.unit_name)
+                                ret = func(self.unit_name, no_block=no_block)
                                 self.assertTrue(ret)
                                 self.mock_success.assert_called_with(
-                                    ['systemd-run', '--scope'] + systemctl_command,
+                                    scope_prefix + systemctl_command,
                                     **assert_kwargs)
 
                             # Scope enabled, failed
@@ -318,10 +322,10 @@ class SystemdScopeTestCase(TestCase):
                                     systemd.__salt__,
                                     {'config.get': self.mock_true,
                                      'cmd.retcode': self.mock_failure}):
-                                ret = func(self.unit_name)
+                                ret = func(self.unit_name, no_block=no_block)
                                 self.assertFalse(ret)
                                 self.mock_failure.assert_called_with(
-                                    ['systemd-run', '--scope'] + systemctl_command,
+                                    scope_prefix + systemctl_command,
                                     **assert_kwargs)
 
                             # Scope disabled, successful
@@ -329,7 +333,7 @@ class SystemdScopeTestCase(TestCase):
                                     systemd.__salt__,
                                     {'config.get': self.mock_false,
                                      'cmd.retcode': self.mock_success}):
-                                ret = func(self.unit_name)
+                                ret = func(self.unit_name, no_block=no_block)
                                 self.assertTrue(ret)
                                 self.mock_success.assert_called_with(
                                     systemctl_command,
@@ -340,7 +344,7 @@ class SystemdScopeTestCase(TestCase):
                                     systemd.__salt__,
                                     {'config.get': self.mock_false,
                                      'cmd.retcode': self.mock_failure}):
-                                ret = func(self.unit_name)
+                                ret = func(self.unit_name, no_block=no_block)
                                 self.assertFalse(ret)
                                 self.mock_failure.assert_called_with(
                                     systemctl_command,
@@ -360,7 +364,7 @@ class SystemdScopeTestCase(TestCase):
                                         systemd.__salt__,
                                         {'config.get': scope_mock,
                                          'cmd.retcode': self.mock_success}):
-                                    ret = func(self.unit_name)
+                                    ret = func(self.unit_name, no_block=no_block)
                                     self.assertTrue(ret)
                                     self.mock_success.assert_called_with(
                                         systemctl_command,
@@ -371,7 +375,7 @@ class SystemdScopeTestCase(TestCase):
                                         systemd.__salt__,
                                         {'config.get': scope_mock,
                                          'cmd.retcode': self.mock_failure}):
-                                    ret = func(self.unit_name)
+                                    ret = func(self.unit_name, no_block=no_block)
                                     self.assertFalse(ret)
                                     self.mock_failure.assert_called_with(
                                         systemctl_command,
@@ -389,6 +393,7 @@ class SystemdScopeTestCase(TestCase):
         if runtime:
             systemctl_command.append('--runtime')
         systemctl_command.append(self.unit_name + '.service')
+        scope_prefix = ['systemd-run', '--scope']
 
         args = [self.unit_name, runtime]
 
@@ -420,7 +425,7 @@ class SystemdScopeTestCase(TestCase):
                         ret = func(*args)
                         self.assertTrue(ret)
                         self.mock_run_all_success.assert_called_with(
-                            ['systemd-run', '--scope'] + systemctl_command,
+                            scope_prefix + systemctl_command,
                             python_shell=False,
                             redirect_stderr=True)
 
@@ -433,7 +438,7 @@ class SystemdScopeTestCase(TestCase):
                             CommandExecutionError,
                             func, *args)
                         self.mock_run_all_failure.assert_called_with(
-                            ['systemd-run', '--scope'] + systemctl_command,
+                            scope_prefix + systemctl_command,
                             python_shell=False,
                             redirect_stderr=True)
 
@@ -497,22 +502,32 @@ class SystemdScopeTestCase(TestCase):
                                 redirect_stderr=True)
 
     def test_start(self):
-        self._change_state('start')
+        self._change_state('start', no_block=False)
+        self._change_state('start', no_block=True)
 
     def test_stop(self):
-        self._change_state('stop')
+        self._change_state('stop', no_block=False)
+        self._change_state('stop', no_block=True)
 
     def test_restart(self):
-        self._change_state('restart')
+        self._change_state('restart', no_block=False)
+        self._change_state('restart', no_block=True)
 
     def test_reload(self):
-        self._change_state('reload_')
+        self._change_state('reload_', no_block=False)
+        self._change_state('reload_', no_block=True)
 
     def test_force_reload(self):
-        self._change_state('force_reload')
+        self._change_state('force_reload', no_block=False)
+        self._change_state('force_reload', no_block=True)
 
     def test_enable(self):
-        self._change_state('enable')
+        self._change_state('enable', no_block=False)
+        self._change_state('enable', no_block=True)
+
+    def test_disable(self):
+        self._change_state('disable', no_block=False)
+        self._change_state('disable', no_block=True)
 
     def test_mask(self):
         self._mask_unmask('mask', False)
