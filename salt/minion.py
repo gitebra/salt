@@ -133,7 +133,7 @@ log = logging.getLogger(__name__)
 # 6. Handle publications
 
 
-def resolve_dns(opts, fallback=True, connect=True):
+def resolve_dns(opts, fallback=True):
     '''
     Resolves the master_ip and master_uri options
     '''
@@ -150,7 +150,7 @@ def resolve_dns(opts, fallback=True, connect=True):
             if opts['master'] == '':
                 raise SaltSystemExit
             ret['master_ip'] = \
-                    salt.utils.dns_check(opts['master'], opts['master_port'], True, opts['ipv6'], connect)
+                    salt.utils.dns_check(opts['master'], opts['master_port'], True, opts['ipv6'])
         except SaltClientError:
             if opts['retry_dns']:
                 while True:
@@ -164,7 +164,7 @@ def resolve_dns(opts, fallback=True, connect=True):
                     time.sleep(opts['retry_dns'])
                     try:
                         ret['master_ip'] = salt.utils.dns_check(
-                            opts['master'], opts['master_port'], True, opts['ipv6'], connect
+                            opts['master'], opts['master_port'], True, opts['ipv6']
                         )
                         break
                     except SaltClientError:
@@ -1822,17 +1822,17 @@ class Minion(MinionBase):
         elif func == 'add':
             self.schedule.add_job(schedule, persist)
         elif func == 'modify':
-            self.schedule.modify_job(name, schedule, persist, where)
+            self.schedule.modify_job(name, schedule, persist)
         elif func == 'enable':
             self.schedule.enable_schedule()
         elif func == 'disable':
             self.schedule.disable_schedule()
         elif func == 'enable_job':
-            self.schedule.enable_job(name, persist, where)
+            self.schedule.enable_job(name, persist)
         elif func == 'run_job':
             self.schedule.run_job(name)
         elif func == 'disable_job':
-            self.schedule.disable_job(name, persist, where)
+            self.schedule.disable_job(name, persist)
         elif func == 'reload':
             self.schedule.reload(schedule)
         elif func == 'list':
