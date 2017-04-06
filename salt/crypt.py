@@ -24,15 +24,25 @@ import getpass
 import salt.ext.six as six
 from salt.ext.six.moves import zip  # pylint: disable=import-error,redefined-builtin
 try:
-    from Crypto.Cipher import AES, PKCS1_OAEP
-    from Crypto.Hash import SHA
-    from Crypto.PublicKey import RSA
-    from Crypto.Signature import PKCS1_v1_5
-    # let this be imported, if possible
-    import Crypto.Random  # pylint: disable=W0611
+    from Cryptodome.Cipher import AES, PKCS1_OAEP
+    from Cryptodome.Hash import SHA
+    from Cryptodome.PublicKey import RSA
+    from Cryptodome.Signature import PKCS1_v1_5
+    import Cryptodome.Random  # pylint: disable=W0611
+    CDOME = True
 except ImportError:
-    # No need for crypt in local mode
-    pass
+    CDOME = False
+if not CDOME:
+    try:
+        from Crypto.Cipher import AES, PKCS1_OAEP
+        from Crypto.Hash import SHA
+        from Crypto.PublicKey import RSA
+        from Crypto.Signature import PKCS1_v1_5
+        # let this be imported, if possible
+        import Crypto.Random  # pylint: disable=W0611
+    except ImportError:
+        # No need for crypt in local mode
+        pass
 
 # Import salt libs
 import salt.defaults.exitcodes
@@ -293,9 +303,10 @@ class MasterKeys(dict):
                             name + '.pub')
         if not os.path.isfile(path):
             key = self.__get_keys()
-            with salt.utils.fopen(path, 'wb+') as f:
-                f.write(key.publickey().exportKey('PEM'))
-        return salt.utils.fopen(path).read()
+            with salt.utils.fopen(path, 'wb+') as wfh:
+                wfh.write(key.publickey().exportKey('PEM'))
+        with salt.utils.fopen(path) as rfh:
+            return rfh.read()
 
     def get_mkey_paths(self):
         return self.pub_path, self.rsa_path
