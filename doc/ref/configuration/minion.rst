@@ -805,6 +805,24 @@ restart.
 
 .. conf_minion:: recon_default
 
+``random_startup_delay``
+------------------------
+
+Default: ``0``
+
+The maximum bound for an interval in which a minion will randomly sleep upon starting
+up prior to attempting to connect to a master. This can be used to splay connection attempts
+for cases where many minions starting up at once may place undue load on a master.
+
+For example, setting this to ``5`` will tell a minion to sleep for a value between ``0``
+and ``5`` seconds.
+
+.. code-block:: yaml
+
+    random_startup_delay: 5
+
+.. conf_minion:: random_startup_delay
+
 ``recon_default``
 -----------------
 
@@ -2255,6 +2273,20 @@ master. If not, check for debug log level and that the necessary version of
 ZeroMQ is installed.
 
 .. conf_minion:: failhard
+
+``tcp_authentication_retries``
+------------------------------
+
+Default: ``5``
+
+The number of times to retry authenticating with the salt master when it comes
+back online.
+
+Zeromq does a lot to make sure when connections come back online that they
+reauthenticate. The tcp transport should try to connect with a new connection
+if the old one times out on reauthenticating.
+
+`-1` for infinite tries.
 
 ``failhard``
 ------------
