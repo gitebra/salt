@@ -70,6 +70,7 @@ from salt.exceptions import (
     SaltCloudExecutionFailure,
     SaltCloudExecutionTimeout,
 )
+from salt.ext.six.moves import filter
 
 # Import 3rd-party libs
 HAS_LIBS = False
@@ -93,6 +94,7 @@ try:
         OSDisk,
         OSProfile,
         StorageProfile,
+        SubResource,
         VirtualHardDisk,
         VirtualMachine,
         VirtualMachineSizeTypes,
@@ -707,16 +709,17 @@ def show_interface(call=None, kwargs=None):  # pylint: disable=unused-argument
     data['ip_configurations'] = {}
     for ip_ in iface.ip_configurations:
         data['ip_configurations'][ip_.name] = make_safe(ip_)
-        try:
-            pubip = netconn.public_ip_addresses.get(
-                kwargs['resource_group'],
-                ip_.name,
-            )
-            data['ip_configurations'][ip_.name]['public_ip_address']['ip_address'] = pubip.ip_address
-        except Exception as exc:
-            log.warning('There was a cloud error: {0}'.format(exc))
-            log.warning('{0}'.format(type(exc)))
-            continue
+        if ip_.public_ip_address is not None:
+            try:
+                pubip = netconn.public_ip_addresses.get(
+                    kwargs['resource_group'],
+                    ip_.name,
+                )
+                data['ip_configurations'][ip_.name]['public_ip_address']['ip_address'] = pubip.ip_address
+            except Exception as exc:
+                log.warning('There was a cloud error: {0}'.format(exc))
+                log.warning('{0}'.format(type(exc)))
+                continue
 
     return data
 
@@ -824,6 +827,17 @@ def create_interface(call=None, kwargs=None):  # pylint: disable=unused-argument
     if kwargs.get('iface_name') is None:
         kwargs['iface_name'] = '{0}-iface0'.format(vm_['name'])
 
+    backend_pools = None
+    if kwargs.get('load_balancer') and kwargs.get('backend_pool'):
+        load_balancer_obj = netconn.load_balancers.get(
+            resource_group_name=kwargs['network_resource_group'],
+            load_balancer_name=kwargs['load_balancer'],
+        )
+        backend_pools = list(filter(
+            lambda backend: backend.name == kwargs['backend_pool'],
+            load_balancer_obj.backend_address_pools,
+        ))
+
     subnet_obj = netconn.subnets.get(
         resource_group_name=kwargs['network_resource_group'],
         virtual_network_name=kwargs['network'],
@@ -864,6 +878,7 @@ def create_interface(call=None, kwargs=None):  # pylint: disable=unused-argument
                     ip_configurations = [
                         NetworkInterfaceIPConfiguration(
                             name='{0}-ip'.format(kwargs['iface_name']),
+                            load_balancer_backend_address_pools=backend_pools,
                             subnet=subnet_obj,
                             **ip_kwargs
                         )
@@ -880,6 +895,7 @@ def create_interface(call=None, kwargs=None):  # pylint: disable=unused-argument
         ip_configurations = [
             NetworkInterfaceIPConfiguration(
                 name='{0}-ip'.format(kwargs['iface_name']),
+                load_balancer_backend_address_pools=backend_pools,
                 subnet=subnet_obj,
                 **ip_kwargs
             )
@@ -937,6 +953,16 @@ def request_instance(call=None, kwargs=None):  # pylint: disable=unused-argument
     if vm_.get('name') is None:
         vm_['name'] = config.get_cloud_config_value(
             'name', vm_, __opts__, search_global=True
+        )
+
+    vm_['availability_set_id'] = None
+    if vm_.get('availability_set'):
+        availability_set = compconn.availability_sets.get(
+            resource_group_name=vm_['resource_group'],
+            availability_set_name=vm_['availability_set'],
+        )
+        vm_['availability_set_id'] = SubResource(
+            id=availability_set.id
         )
 
     os_kwargs = {}
@@ -1107,6 +1133,7 @@ def request_instance(call=None, kwargs=None):  # pylint: disable=unused-argument
                 NetworkInterfaceReference(vm_['iface_id']),
             ],
         ),
+        availability_set=vm_['availability_set_id'],
     )
 
     __utils__['cloud.fire_event'](
