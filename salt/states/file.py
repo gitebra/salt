@@ -1376,6 +1376,7 @@ def symlink(
                     os.path.dirname(name)
                 )
             )
+
     if __salt__['file.is_link'](name):
         # The link exists, verify that it matches the target
         if os.path.normpath(__salt__['file.readlink'](name)) != os.path.normpath(target):
@@ -2243,6 +2244,12 @@ def managed(name,
             '\'replace\' was set to \'True\'. As there is no source to '
             'replace the file with, \'replace\' has been set to \'False\' to '
             'avoid reading the file unnecessarily.'.format(name)
+        )
+
+    if 'file_mode' in kwargs:
+        ret.setdefault('warnings', []).append(
+            'The \'file_mode\' argument will be ignored.  '
+            'Please use \'mode\' instead to set file permissions.'
         )
 
     # Use this below to avoid multiple '\0' checks and save some CPU cycles
@@ -6292,6 +6299,9 @@ def serialize(name,
                 }
 
     if serializer_opts:
+        if not options.get(serializer_name, {}):
+            options[serializer_name] = {}
+
         options.get(serializer_name, {}).update(
             salt.utils.data.repack_dictlist(serializer_opts)
         )
@@ -6306,7 +6316,12 @@ def serialize(name,
                         'result': False}
 
             with salt.utils.files.fopen(name, 'r') as fhr:
-                existing_data = __serializers__[deserializer_name](fhr, **options.get(serializer_name, {}))
+                try:
+                    existing_data = __serializers__[deserializer_name](fhr, **options.get(serializer_name, {}))
+                except (TypeError, salt.serializers.DeserializationError):
+                    log.debug('DeserializationError exception caught, trying to merge without serializer_opts: %s', options.get(serializer_name, {}))
+                    fhr.seek(0)
+                    existing_data = __serializers__[deserializer_name](fhr)
 
             if existing_data is not None:
                 merged_data = salt.utils.dictupdate.merge_recurse(existing_data, dataset)

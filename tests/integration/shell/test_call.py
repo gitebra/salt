@@ -378,7 +378,7 @@ class CallTest(ShellCase, testprogram.TestProgramCase, ShellCaseCommonTestsMixin
             _ = self.run_script(
                 'salt-call',
                 '-c {0} --output-file={1} test.versions'.format(
-                    self.get_config_dir(),
+                    self.config_dir,
                     output_file_append
                 ),
                 catch_stderr=True,
@@ -391,7 +391,7 @@ class CallTest(ShellCase, testprogram.TestProgramCase, ShellCaseCommonTestsMixin
             self.run_script(
                 'salt-call',
                 '-c {0} --output-file={1} --output-file-append test.versions'.format(
-                    self.get_config_dir(),
+                    self.config_dir,
                     output_file_append
                 ),
                 catch_stderr=True,
@@ -408,7 +408,7 @@ class CallTest(ShellCase, testprogram.TestProgramCase, ShellCaseCommonTestsMixin
         with salt.utils.files.set_umask(0o077):
             try:
                 # Let's create an initial output file with some data
-                self.run_script(
+                stdout, stderr, retcode = self.run_script(
                     'salt-call',
                     '-c {0} --output-file={1} -g'.format(
                         self.get_config_dir(),
@@ -417,7 +417,20 @@ class CallTest(ShellCase, testprogram.TestProgramCase, ShellCaseCommonTestsMixin
                     catch_stderr=True,
                     with_retcode=True
                 )
-                stat1 = os.stat(output_file)
+                try:
+                    stat1 = os.stat(output_file)
+                except OSError:
+                    log.error(
+                        'run_script failed to generate output file:\n'
+                        'return code %d\n'
+                        'stdout:\n'
+                        '%s\n\n'
+                        'stderr\n'
+                        '%s',
+                        retcode, stdout, stderr
+                    )
+                    self.fail(
+                        'Failed to generate output file, see log for details')
 
                 # Let's change umask
                 os.umask(0o777)  # pylint: disable=blacklisted-function
@@ -425,7 +438,7 @@ class CallTest(ShellCase, testprogram.TestProgramCase, ShellCaseCommonTestsMixin
                 self.run_script(
                     'salt-call',
                     '-c {0} --output-file={1} --output-file-append -g'.format(
-                        self.get_config_dir(),
+                        self.config_dir,
                         output_file
                     ),
                     catch_stderr=True,
@@ -443,7 +456,7 @@ class CallTest(ShellCase, testprogram.TestProgramCase, ShellCaseCommonTestsMixin
                 self.run_script(
                     'salt-call',
                     '-c {0} --output-file={1} -g'.format(
-                        self.get_config_dir(),
+                        self.config_dir,
                         output_file
                     ),
                     catch_stderr=True,
