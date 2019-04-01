@@ -209,7 +209,7 @@ def orchestrate_high(data, test=None, queue=False, pillar=None, **kwargs):
 def orchestrate_show_sls(mods,
                          saltenv='base',
                          test=None,
-                         exclude=None,
+                         queue=False,
                          pillar=None,
                          pillarenv=None,
                          pillar_enc=None):
@@ -234,12 +234,12 @@ def orchestrate_show_sls(mods,
     minion = salt.minion.MasterMinion(__opts__)
     running = minion.functions['state.show_sls'](
         mods,
-        saltenv,
         test,
-        exclude,
+        queue,
         pillar=pillar,
         pillarenv=pillarenv,
-        pillar_enc=pillar_enc)
+        pillar_enc=pillar_enc,
+        saltenv=saltenv)
 
     ret = {minion.opts['id']: running}
     return ret
@@ -258,7 +258,7 @@ def event(tagmatch='*',
     Watch Salt's event bus and block until the given tag is matched
 
     .. versionadded:: 2014.7.0
-    .. versionchanged:: Fluorine
+    .. versionchanged:: 2019.2.0
         ``tagmatch`` can now be either a glob or regular expression.
 
     This is useful for utilizing Salt's event bus from shell scripts or for

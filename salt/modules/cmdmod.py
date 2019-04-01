@@ -285,7 +285,7 @@ def _run(cmd,
     '''
     if 'pillar' in kwargs and not pillar_override:
         pillar_override = kwargs['pillar']
-    if _is_valid_shell(shell) is False:
+    if output_loglevel != 'quiet' and _is_valid_shell(shell) is False:
         log.warning(
             'Attempt to run a shell command with what may be an invalid shell! '
             'Check to ensure that the shell <%s> is valid for this user.',
@@ -849,11 +849,11 @@ def _run(cmd,
             )
             log.error(log_callback(msg))
         if ret['stdout']:
-            log.log(output_loglevel, 'stdout: {0}'.format(log_callback(ret['stdout'])))
+            log.log(output_loglevel, 'stdout: %s', log_callback(ret['stdout']))
         if ret['stderr']:
-            log.log(output_loglevel, 'stderr: {0}'.format(log_callback(ret['stderr'])))
+            log.log(output_loglevel, 'stderr: %s', log_callback(ret['stderr']))
         if ret['retcode']:
-            log.log(output_loglevel, 'retcode: {0}'.format(ret['retcode']))
+            log.log(output_loglevel, 'retcode: %s', ret['retcode'])
 
     return ret
 
@@ -1125,7 +1125,7 @@ def run(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -1145,7 +1145,7 @@ def run(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -1395,7 +1395,7 @@ def shell(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -1415,7 +1415,7 @@ def shell(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -1638,7 +1638,7 @@ def run_stdout(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -1658,7 +1658,7 @@ def run_stdout(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -1864,7 +1864,7 @@ def run_stderr(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -1884,7 +1884,7 @@ def run_stderr(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -2114,7 +2114,7 @@ def run_all(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -2134,7 +2134,7 @@ def run_all(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -2331,7 +2331,7 @@ def retcode(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -2351,7 +2351,7 @@ def retcode(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -2602,7 +2602,7 @@ def script(source,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -2622,7 +2622,7 @@ def script(source,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -2867,7 +2867,7 @@ def script_retcode(source,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -2887,7 +2887,7 @@ def script_retcode(source,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
@@ -3069,6 +3069,7 @@ def run_chroot(root,
                group=None,
                shell=DEFAULT_SHELL,
                python_shell=True,
+               binds=None,
                env=None,
                clean_env=False,
                template=None,
@@ -3096,19 +3097,17 @@ def run_chroot(root,
 
     :param str root: Path to the root of the jail to use.
 
-    stdin
-        A string of standard input can be specified for the command to be run using
-        the ``stdin`` parameter. This can be useful in cases where sensitive
-        information must be read from standard input.:
+    :param str stdin: A string of standard input can be specified for
+        the command to be run using the ``stdin`` parameter. This can
+        be useful in cases where sensitive information must be read
+        from standard input.:
 
-    runas
-        User to run script as.
+    :param str runas: User to run script as.
 
-    group
-        Group to run script as.
+    :param str group: Group to run script as.
 
-    shell
-        Shell to execute under. Defaults to the system default shell.
+    :param str shell: Shell to execute under. Defaults to the system
+        default shell.
 
     :param str cmd: The command to run. ex: ``ls -lart /home``
 
@@ -3132,6 +3131,9 @@ def run_chroot(root,
         arguments. Set to True to use shell features, such as pipes or
         redirection.
 
+    :param list binds: List of directories that will be exported inside
+        the chroot with the bind option.
+
     :param dict env: Environment variables to be set prior to execution.
 
         .. note::
@@ -3150,11 +3152,11 @@ def run_chroot(root,
         engine will be used to render the downloaded file. Currently jinja,
         mako, and wempy are supported.
 
-    :param bool rstrip:
-        Strip all whitespace off the end of output before it is returned.
+    :param bool rstrip: Strip all whitespace off the end of output
+        before it is returned.
 
-    :param str umask:
-         The umask (in octal) to use when running the command.
+    :param str umask: The umask (in octal) to use when running the
+         command.
 
     :param str output_encoding: Control the encoding used to decode the
         command's output.
@@ -3207,7 +3209,7 @@ def run_chroot(root,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -3231,12 +3233,25 @@ def run_chroot(root,
     '''
     __salt__['mount.mount'](
         os.path.join(root, 'dev'),
-        'udev',
+        'devtmpfs',
         fstype='devtmpfs')
     __salt__['mount.mount'](
         os.path.join(root, 'proc'),
         'proc',
         fstype='proc')
+    __salt__['mount.mount'](
+        os.path.join(root, 'sys'),
+        'sysfs',
+        fstype='sysfs')
+
+    binds = binds if binds else []
+    for bind_exported in binds:
+        bind_exported_to = os.path.relpath(bind_exported, os.path.sep)
+        bind_exported_to = os.path.join(root, bind_exported_to)
+        __salt__['mount.mount'](
+            bind_exported_to,
+            bind_exported,
+            opts='default,bind')
 
     # Execute chroot routine
     sh_ = '/bin/sh'
@@ -3290,6 +3305,12 @@ def run_chroot(root,
         log.error('Processes running in chroot could not be killed, '
                   'filesystem will remain mounted')
 
+    for bind_exported in binds:
+        bind_exported_to = os.path.relpath(bind_exported, os.path.sep)
+        bind_exported_to = os.path.join(root, bind_exported_to)
+        __salt__['mount.umount'](bind_exported_to)
+
+    __salt__['mount.umount'](os.path.join(root, 'sys'))
     __salt__['mount.umount'](os.path.join(root, 'proc'))
     __salt__['mount.umount'](os.path.join(root, 'dev'))
     if hide_output:
@@ -3420,7 +3441,7 @@ def shell_info(shell, list_modules=False):
             hive='HKEY_LOCAL_MACHINE',
             key='Software\\Microsoft\\PowerShell')
         pw_keys.sort(key=int)
-        if len(pw_keys) == 0:
+        if not pw_keys:
             return {
                 'error': 'Unable to locate \'powershell\' Reason: Cannot be '
                          'found in registry.',
@@ -3708,7 +3729,7 @@ def powershell(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -3728,7 +3749,7 @@ def powershell(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :returns:
         :dict: A dictionary of data returned by the powershell command.
@@ -4028,7 +4049,7 @@ def powershell_all(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -4048,7 +4069,7 @@ def powershell_all(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :return: A dictionary with the following entries:
 
@@ -4315,7 +4336,7 @@ def run_bg(cmd,
         return code returned from the run matches any in the provided list,
         the return code will be overridden with zero.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     :param list success_stdout: This parameter will be allow a list of
         strings that when found in standard out should be considered a success.
@@ -4335,7 +4356,7 @@ def run_bg(cmd,
         If ``True``, Salt will not automatically convert the characters ``\\n``
         present in the ``stdin`` value to newlines.
 
-      .. versionadded:: Fluorine
+      .. versionadded:: 2019.2.0
 
     CLI Example:
 
